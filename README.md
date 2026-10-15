@@ -4,6 +4,8 @@ Windows / macOS 的 NAM 模型加载与综合软件效果器。提供独立运�
 
 本仓库独立维护 ToneDock 软件，保留软件开发历史与第三方许可。拆分来源见 [迁移说明](docs/MIGRATION.md)。
 
+Windows/macOS 自动构建与开发包见 [本仓库 Actions](https://github.com/wjwpoi/ToneDock/actions/workflows/tonedock.yml)；开发包在对应运行成功后生成，尚非正式发行版。
+
 当前为首版工程。Linux 云端用于编译与自动测试；Windows/macOS 原生构建、DAW 扫描、声卡实测与真实 TONE3000 账号联调分别记录，不用云端编译替代平台验收。见 [验证状态](docs/VALIDATION.md)。
 
 ## 功能

@@ -27,7 +27,7 @@
     "macOSDevelopmentArchive": "passed on native macOS: tar.gz with executable modes and symlinks generated and uploaded"
   },
   "notVerified": [
-    "Windows/macOS workflow under the standalone repository root (publication pending)",
+    "Windows/macOS workflow under the standalone repository root (first run in progress)",
     "Windows/macOS DAW scans and physical audio interface checks",
     "Intel macOS runtime (universal binary built; AU validation ran on the macos-14 arm64 runner)",
     "native protocol registration on Windows/macOS",
@@ -74,7 +74,7 @@
     "macOS": "completed successfully: universal standalone/VST3/AU build, core tests, full AU validation, macOS archive and artifact upload",
     "auDiscovery": "user-directory install, ad-hoc signature verification, registrar refresh, bounded discovery wait before one full auval invocation",
     "validatedRuntime": "macos-14 arm64 runner; arm64/x86_64 universal binaries built",
-    "scope": "pre-split source baseline in DaisySeedProjects; standalone repository native workflow has not run"
+    "scope": "pre-split source baseline in DaisySeedProjects; independent repository result recorded separately"
   },
   "migration": {
     "sourceRepository": "https://github.com/wjwpoi/DaisySeedProjects",
@@ -98,6 +98,15 @@
     },
     "ciReporter": "passed: invoked outside repo, error exit code 7 and bounded annotation preserved",
     "macOSArchiveFixture": "passed: executable modes, symlinks and standalone documentation preserved",
-    "sourcePublication": "pending: new GitHub repository URL required; API creation blocked by network policy"
+    "sourcePublication": "passed: main pushed to the independent repository and full remote commit verified",
+    "targetRepository": "https://github.com/wjwpoi/ToneDock",
+    "publishedCommit": "e2859301eb6a376a8098b3441887eb94109a2b3c"
+  },
+  "standaloneCI": {
+    "commit": "e2859301eb6a376a8098b3441887eb94109a2b3c",
+    "run": "https://github.com/wjwpoi/ToneDock/actions/runs/38731575080",
+    "observedAt": "2026-10-15T12:02:50.018921+00:00",
+    "Windows": "in progress; completion not yet verified",
+    "macOS": "in progress; completion not yet verified"
   }
 }

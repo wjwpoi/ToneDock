@@ -17,7 +17,7 @@
 | AU注册等待脚本 | 模拟工具检查：延迟发现、超时、仅执行一次完整校验、校验错误退出码保留；不替代真实AU结果 |
 | Windows（迁移前基线） | `4283c77` 独立软件/VST3原生构建、核心测试和开发包上传通过；真实DAW与声卡验收未执行 |
 | macOS（迁移前基线） | `4283c77` Universal独立软件/VST3/AU构建、核心测试、完整AU校验和开发包上传通过；执行环境为macos-14 arm64，Intel运行验收未执行 |
-| 独立仓库Windows/macOS CI | 根目录路径已适配，上传后等待新仓库的实际Actions结果 |
+| 独立仓库Windows/macOS CI | `e285930` 已发布；[首轮检查](https://github.com/wjwpoi/ToneDock/actions/runs/38731575080) 的 Windows/macOS 作业均已启动，尚未确认完成 |
 | TONE3000 真实账号 | 未执行；依据官方接入代码完成适配，实际公钥、浏览器授权和下载待联调 |
 | 声卡 / DAW 实测 | 未执行；不以云端DSP检查承诺实际端到端延迟或最低可用缓冲 |
 | 发行安装包 / 发行签名 / 公证 | 未执行 |
@@ -28,7 +28,7 @@
 
 机器记录见 [validation.json](validation.json)，原始输出见 [核心测试](validation/core-tests.log) 与 [独立软件运行日志](validation/standalone.log)。
 
-原生检查与开发包下载见 [GitHub Actions](https://github.com/wjwpoi/DaisySeedProjects/actions/runs/38723754252)。Windows与macOS均完成该轮检查；这些结果不代替真实DAW、声卡或账号联调。
+独立仓库原生检查与开发包见 [ToneDock Actions](https://github.com/wjwpoi/ToneDock/actions/workflows/tonedock.yml)。[原仓库基线](https://github.com/wjwpoi/DaisySeedProjects/actions/runs/38723754252) 的 Windows 与 macOS 均已通过；这些结果不代替本仓库原生检查或真实DAW、声卡及账号联调。
 
 AU安装后先签名验证并刷新注册服务，等待系统枚举出 `aufx / Tnd1 / Tndk` 后，再执行一次完整 `auval -v aufx Tnd1 Tndk`；超时和校验错误均保留为失败。首轮的名称读取、版本 `-50` 与组件未找到错误发生于发现阶段；加入注册就绪等待的用户目录版本已实际通过。独立仓库沿用该AU注册流程，并适配根目录路径；新工作流仍须以本仓库的Actions实际结果为准。
 
