@@ -24,6 +24,7 @@ int main(){
     setenv("TONEDOCK_DATA_DIR",directory.getChildFile("shared").getFullPathName().toRawUTF8(),1);
 #endif
     try {
+        check(tonedock::ui::text("效果链")==juce::String::fromUTF8("效果链"),"UTF-8 literal labels do not become Latin-1 mojibake");
         check(tonedock::parseToneLink("tonedock://tone/42")==42,"custom protocol");
         check(tonedock::parseToneLink("https://www.tone3000.com/tones/test-amp-42")==42,"tone page");
         for(auto link:juce::StringArray{"tonedock://tone/0","tonedock://tone/42/extra","https://evil.test/tones/42","javascript:alert(1)","https://www.tone3000.com.evil.test/tones/42","tonedock://tone/999999999999999"})check(!tonedock::parseToneLink(link),"reject invalid links");
@@ -108,6 +109,7 @@ int main(){
             auto click=[&](const juce::String& name){for(int i=0;i<editor->getNumChildComponents();++i)if(auto* button=dynamic_cast<juce::TextButton*>(editor->getChildComponent(i));button && button->getButtonText()==tonedock::ui::text(name)){button->onClick();return;}throw std::runtime_error("UI button missing");};
             auto* categories=dynamic_cast<juce::ComboBox*>(child("library-filter"));auto* effects=dynamic_cast<juce::ComboBox*>(child("effect-choice"));auto* category=dynamic_cast<juce::TextEditor*>(child("library-category"));
             auto press=[&](const juce::String& id){auto* b=dynamic_cast<juce::TextButton*>(child(id));check(b!=nullptr,"UI control exists by stable ID");b->onClick();};
+            check(dynamic_cast<juce::TextButton*>(child("audio-page"))->getButtonText()==juce::String::fromUTF8("设备"),"new device tab label contains real Chinese codepoints");
             check(categories && effects && category,"localized category and effect controls exist");
             check(effects->getText()==juce::String::fromUTF8("过载"),"effect chooser renders Chinese");
             check(category->getText()==juce::String::fromUTF8("音箱"),"canonical library category renders Chinese");

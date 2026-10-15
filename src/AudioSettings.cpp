@@ -22,11 +22,11 @@ void AudioSettings::refresh() {
     auto* device=manager.getCurrentAudioDevice();
     if(device){
         inputRoute.addItem(ui::text("关闭输入"),1);auto ins=device->getInputChannelNames();
-        for(int i=0;i<ins.size();++i)inputRoute.addItem(juce::String(i+1)+" · "+ins[i]+"  "+ui::text("单声道"),i+2);
+        for(int i=0;i<ins.size();++i)inputRoute.addItem(juce::String(i+1)+ui::text(" · ")+ins[i]+"  "+ui::text("单声道"),i+2);
         auto activeIn=device->getActiveInputChannels();int inCount=activeIn.countNumberOfSetBits();
         if(inCount<=1)inputRoute.setSelectedId(inCount==0?1:activeIn.findNextSetBit(0)+2,juce::dontSendNotification);
         else {inputRoute.addItem(ui::text("自定义多通道输入"),10000);inputRoute.setSelectedId(10000,juce::dontSendNotification);}
-        auto outs=device->getOutputChannelNames();for(int i=0;i+1<outs.size();i+=2)outputRoute.addItem(juce::String(i+1)+" / "+juce::String(i+2)+" · "+outs[i]+" + "+outs[i+1],i+1);
+        auto outs=device->getOutputChannelNames();for(int i=0;i+1<outs.size();i+=2)outputRoute.addItem(juce::String(i+1)+" / "+juce::String(i+2)+ui::text(" · ")+outs[i]+" + "+outs[i+1],i+1);
         auto activeOut=device->getActiveOutputChannels();auto first=activeOut.findNextSetBit(0);
         if(activeOut.countNumberOfSetBits()==2 && first%2==0 && activeOut[first+1])outputRoute.setSelectedId(first+1,juce::dontSendNotification);
         else{outputRoute.addItem(ui::text("自定义输出通道"),10000);outputRoute.setSelectedId(10000,juce::dontSendNotification);}

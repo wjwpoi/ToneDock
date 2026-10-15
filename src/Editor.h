@@ -37,6 +37,7 @@ private:
     std::vector<std::unique_ptr<juce::TextButton>> overview;
     std::unique_ptr<juce::Component> devicePage;
     juce::ListBox libraryList;
+    juce::Label emptyLibrary;
     juce::TextEditor search,categoryEdit,tagsEdit,link;
     juce::ComboBox categoryFilter,effectChoice;
     juce::StringArray categoryValues;

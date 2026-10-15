@@ -97,6 +97,9 @@ inline juce::String text(const juce::String& source) {
         if (source == key) return juce::String::fromUTF8(value);
     return source;
 }
+// JUCE's plain const-char String constructor treats bytes as ASCII/Latin-1.
+// Source literals in this project are UTF-8, including untranslated UI labels.
+inline juce::String text(const char* source) {return text(juce::String::fromUTF8(source));}
 inline juce::String categoryLabel(const juce::String& value) {
     for (auto key : {"Amplifier", "Pedal", "Cabinet IR", "Unsorted"})
         if (value == key) return text(key);
