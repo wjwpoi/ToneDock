@@ -24,6 +24,7 @@ int main(){
     setenv("TONEDOCK_DATA_DIR",directory.getChildFile("shared").getFullPathName().toRawUTF8(),1);
 #endif
     try {
+        check(tonedock::ui::text("效果链")==juce::String::fromUTF8("效果链"),"UTF-8 literal labels do not become Latin-1 mojibake");
         check(tonedock::parseToneLink("tonedock://tone/42")==42,"custom protocol");
         check(tonedock::parseToneLink("https://www.tone3000.com/tones/test-amp-42")==42,"tone page");
         for(auto link:juce::StringArray{"tonedock://tone/0","tonedock://tone/42/extra","https://evil.test/tones/42","javascript:alert(1)","https://www.tone3000.com.evil.test/tones/42","tonedock://tone/999999999999999"})check(!tonedock::parseToneLink(link),"reject invalid links");
@@ -99,24 +100,59 @@ int main(){
                 check(stream!=nullptr,"create screenshot file");stream->setPosition(0);stream->truncate();
                 check(juce::PNGImageFormat().writeImageToStream(image,*stream),"render actual native editor screenshot");
             }
-            juce::ListBox* libraryList=nullptr;juce::TextEditor* search=nullptr;
-            for(int i=0;i<editor->getNumChildComponents();++i){auto* child=editor->getChildComponent(i);
-                if(auto* list=dynamic_cast<juce::ListBox*>(child);list && child->getX()<100)libraryList=list;
-                if(auto* text=dynamic_cast<juce::TextEditor*>(child);text && child->getY()==141)search=text;}
+            auto child=[&](const juce::String& id)->juce::Component*{for(int i=0;i<editor->getNumChildComponents();++i)if(editor->getChildComponent(i)->getComponentID()==id)return editor->getChildComponent(i);return nullptr;};
+            auto* libraryList=dynamic_cast<juce::ListBox*>(child("library-list"));auto* search=dynamic_cast<juce::TextEditor*>(child("library-search"));
             check(libraryList && search,"native library controls exist");libraryList->selectRow(0);
             auto extra=directory.getChildFile("extra.nam");extra.replaceWithText(fixture.loadFileAsString().replace("Fixture Amp","AAA Amp").replace("[0.5]","[0.3]"));
             guiProcessor.services->library.importFile(extra);search->setText("Amp",false);search->onTextChange();
             check(libraryList->getSelectedRow()==1,"library refresh preserves model identity after reordering");
-            auto click=[&](const juce::String& name){for(int i=0;i<editor->getNumChildComponents();++i)if(auto* button=dynamic_cast<juce::TextButton*>(editor->getChildComponent(i));button && button->getButtonText()==name){button->onClick();return;}throw std::runtime_error("UI button missing");};
+            auto click=[&](const juce::String& name){for(int i=0;i<editor->getNumChildComponents();++i)if(auto* button=dynamic_cast<juce::TextButton*>(editor->getChildComponent(i));button && button->getButtonText()==tonedock::ui::text(name)){button->onClick();return;}throw std::runtime_error("UI button missing");};
+            auto* categories=dynamic_cast<juce::ComboBox*>(child("library-filter"));auto* effects=dynamic_cast<juce::ComboBox*>(child("effect-choice"));auto* category=dynamic_cast<juce::TextEditor*>(child("library-category"));
+            auto press=[&](const juce::String& id){auto* b=dynamic_cast<juce::TextButton*>(child(id));check(b!=nullptr,"UI control exists by stable ID");b->onClick();};
+            check(dynamic_cast<juce::TextButton*>(child("audio-page"))->getButtonText()==juce::String::fromUTF8("设备"),"new device tab label contains real Chinese codepoints");
+            check(categories && effects && category,"localized category and effect controls exist");
+            check(effects->getText()==juce::String::fromUTF8("过载"),"effect chooser renders Chinese");
+            check(category->getText()==juce::String::fromUTF8("音箱"),"canonical library category renders Chinese");
+            click("Save tags");
+            auto savedEntry=guiProcessor.services->library.entries();
+            check(std::all_of(savedEntry.begin(),savedEntry.end(),[](const auto& e){return e.category=="Amplifier";}),"saving translated category preserves canonical values");
+            auto custom=guiProcessor.services->library.importFile(extra);custom.category=juce::String::fromUTF8("音箱");guiProcessor.services->library.update(custom);
+            search->onTextChange();libraryList->selectRow(0);click("Save tags");
+            savedEntry=guiProcessor.services->library.entries();
+            auto customSaved=std::find_if(savedEntry.begin(),savedEntry.end(),[&](const auto& e){return e.id==custom.id;});
+            check(customSaved!=savedEntry.end() && customSaved->category==custom.category,"saving a custom category that matches a translation preserves its value");
+            custom.category="Amplifier";guiProcessor.services->library.update(custom);search->onTextChange();
+            categories->setSelectedId(3,juce::sendNotificationSync);
+            check(categories->getText()==juce::String::fromUTF8("音箱") && libraryList->getModel()->getNumRows()==2,"Chinese category filter uses canonical values");
+            search->setText(juce::String::fromUTF8("音箱"),false);search->onTextChange();
+            check(libraryList->getModel()->getNumRows()==2,"Chinese category search finds canonical models");
+            search->setText("Amp",false);search->onTextChange();
             auto selected=guiProcessor.engine.chain()[1];
             for(int i=0;i<editor->getNumChildComponents();++i)if(auto* slider=dynamic_cast<juce::Slider*>(editor->getChildComponent(i));slider && slider->getSliderStyle()==juce::Slider::RotaryHorizontalVerticalDrag){slider->setValue(.7,juce::sendNotificationSync);break;}
             check(std::abs(selected.controls->values[0].load()-.7f)<.001,"UI knob controls audio parameter");
-            click("+ Add");check(guiProcessor.engine.chain().size()==5,"UI adds selected effect");
-            click("Up");check(guiProcessor.engine.chain()[0].id==selected.id,"UI moves effect up");
-            click("Enable / bypass");check(!selected.controls->enabled.load(),"UI bypasses effect");
-            juce::DragAndDropTarget::SourceDetails drag(juce::var("stage:"+selected.id),editor.get(),juce::Point<int>(500,420));
-            editor->itemDropped(drag);check(guiProcessor.engine.chain()[3].id==selected.id,"drag reorders actual effect chain");
-            click("Delete");auto edited=guiProcessor.engine.chain();check(edited.size()==4 && std::none_of(edited.begin(),edited.end(),[&](const auto& s){return s.id==selected.id;}),"UI removes effect");
+
+            press("add-effect");check(guiProcessor.engine.chain().size()==5 && guiProcessor.engine.chain().back().type=="Drive","Chinese effect chooser adds canonical effect");
+            press("overview:"+selected.id);press("move-left");check(guiProcessor.engine.chain()[0].id==selected.id,"UI moves selected effect left");
+            press("bypass-effect");check(!selected.controls->enabled.load(),"UI bypasses effect");
+            auto* viewport=dynamic_cast<juce::Viewport*>(child("chain-viewport"));check(viewport!=nullptr,"horizontal chain viewport exists");
+            viewport->setViewPosition(0,0);
+            juce::DragAndDropTarget::SourceDetails drag(juce::var("stage:"+selected.id),editor.get(),juce::Point<int>(viewport->getX()+750,viewport->getY()+90));
+            editor->itemDropped(drag);check(guiProcessor.engine.chain()[3].id==selected.id,"horizontal drag reorders actual effect chain");
+            press("duplicate-effect");auto duplicated=guiProcessor.engine.chain()[4];
+            check(duplicated.id!=selected.id && duplicated.file==selected.file && duplicated.controls!=selected.controls,"duplicate creates independent controls with the same model");
+            auto originalValue=selected.controls->values[0].load();duplicated.controls->values[0]=.9f;check(selected.controls->values[0].load()==originalValue,"duplicated knobs do not change the source effect");
+            libraryList->selectRow(0);click("Load model");auto withModel=guiProcessor.engine.chain();
+            check(withModel[3].file==selected.file && withModel[4].file!=selected.file,"model loads into selected NAM when two NAM stages exist");
+            press("delete-effect");auto edited=guiProcessor.engine.chain();check(edited.size()==5 && std::none_of(edited.begin(),edited.end(),[&](const auto& s){return s.id==duplicated.id;}),"UI removes selected effect");
+            for(int i=0;i<14;++i)press("add-effect");check(guiProcessor.engine.chain().size()==16,"chain stops at sixteen effects");
+            check(!child("add-effect")->isEnabled() && !child("duplicate-effect")->isEnabled(),"full chain disables adding and duplicating");
+            press("overview:"+guiProcessor.engine.chain().back().id);check(viewport->getViewPositionX()>0,"overview reveals selected pedal beyond the visible chain");
+            editor->setSize(1120,780);check(viewport->getViewedComponent()->getWidth()>viewport->getWidth(),"long chain scrolls at minimum size");
+            for(int i=0;i<editor->getNumChildComponents();++i){auto* c=editor->getChildComponent(i);if(c->isVisible())check(editor->getLocalBounds().contains(c->getBounds()),"visible UI controls stay inside compact editor");}
+            press("audio-page");check(child("device-content")->isVisible() && !viewport->isVisible(),"plugin device tab displays host settings explanation");
+            press("work-page");check(viewport->isVisible() && !child("device-content")->isVisible(),"returning from device tab restores pedalboard");
+            press("delete-effect");check(child("add-effect")->isEnabled(),"deleting from full chain permits adding again");
+
         }
         std::cout<<"PASS "<<checks<<" checks\n";return 0;
     }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<" checks: "<<e.what()<<"\n";return 1;}

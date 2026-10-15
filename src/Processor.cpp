@@ -14,9 +14,9 @@ bool Services::configureKey(const juce::String& key) {
 }
 juce::AudioProcessorValueTreeState::ParameterLayout Processor::makeParameters() {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
-    p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"input",1},"Input gain",-36.0f,24.0f,0.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"output",1},"Output gain",-60.0f,12.0f,-12.0f));
-    p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"bypass",1},"Bypass",false));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"input",1},ui::text("Input gain"),-36.0f,24.0f,0.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"output",1},ui::text("Output gain"),-60.0f,12.0f,-12.0f));
+    p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"bypass",1},ui::text("Bypass"),false));
     return {p.begin(),p.end()};
 }
 Processor::Processor() : AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::stereo(),true)
@@ -57,7 +57,7 @@ void Processor::processBlock(juce::AudioBuffer<float>& audio,juce::MidiBuffer&) 
     }
     outputPeak.store(juce::jmax(audio.getMagnitude(0,0,audio.getNumSamples()),audio.getMagnitude(1,0,audio.getNumSamples())));
 }
-void Processor::setMessage(juce::String value) { std::lock_guard lock(messageMutex);notification=std::move(value); }
+void Processor::setMessage(juce::String value) { std::lock_guard lock(messageMutex);notification=ui::message(value); }
 juce::String Processor::message() const { std::lock_guard lock(messageMutex);return notification; }
 void Processor::addEffect(const juce::String& type) {
     auto chain=engine.chain();if(chain.size()>=16){setMessage("Maximum 16 effects");return;}
@@ -65,9 +65,10 @@ void Processor::addEffect(const juce::String& type) {
     if(type=="Reverb"){s.controls->values[2]=.2f;}if(type=="Delay"){s.controls->values[1]=.3f;s.controls->values[2]=.25f;}
     chain.push_back(std::move(s));engine.setChain(std::move(chain));
 }
-void Processor::loadModel(const ModelEntry& entry) {
+void Processor::loadModel(const ModelEntry& entry,const juce::String& targetStageId) {
     auto chain=engine.chain();auto type=entry.kind=="ir"?juce::String("Cabinet IR"):juce::String("NAM");
-    auto it=std::find_if(chain.begin(),chain.end(),[&](const auto& s){return s.type==type;});
+    auto it=std::find_if(chain.begin(),chain.end(),[&](const auto& s){return s.id==targetStageId && s.type==type;});
+    if(it==chain.end())it=std::find_if(chain.begin(),chain.end(),[&](const auto& s){return s.type==type;});
     if(it==chain.end()) {
         if(chain.size()>=16){setMessage("Remove an effect before adding this model");return;}
         StageSpec spec;spec.id=juce::Uuid().toString();spec.type=type;chain.push_back(spec);it=std::prev(chain.end());
@@ -90,7 +91,7 @@ void Processor::importFiles(juce::StringArray files) {
                 }
             } else if(file.hasFileExtension("zip"))count+=int(services->library.importArchive(file).size());
             else{services->library.importFile(file);++count;}
-        }catch(const std::exception& e){failures+=juce::String(e.what())+"; ";}
+        }catch(const std::exception& e){failures+=ui::message(e.what())+"; ";}
         ++libraryVersion;setMessage("Imported / found "+juce::String(count)+" model(s)"+(failures.isNotEmpty()?". "+failures:juce::String()));
     });
 }
@@ -105,7 +106,7 @@ void Processor::downloadModel(t3k::Model model,juce::var provenance,std::functio
     services->tone3000.downloadModelFile(model,downloadCallbacks.wrap([this,provenance,completion](t3k::Result<juce::File> result){
         juce::String status;
         if(result.ok()){importDownloaded(*result,provenance);status="Download complete; validating and adding to library.";}
-        else{status=result.error.userMessage();setMessage(status);}
+        else{status=ui::networkError(result.error.status,result.error.message);setMessage(status);}
         if(completion)completion(status);
     }));
 }
