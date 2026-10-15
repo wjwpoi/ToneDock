@@ -107,11 +107,26 @@ int main(){
             auto extra=directory.getChildFile("extra.nam");extra.replaceWithText(fixture.loadFileAsString().replace("Fixture Amp","AAA Amp").replace("[0.5]","[0.3]"));
             guiProcessor.services->library.importFile(extra);search->setText("Amp",false);search->onTextChange();
             check(libraryList->getSelectedRow()==1,"library refresh preserves model identity after reordering");
-            auto click=[&](const juce::String& name){for(int i=0;i<editor->getNumChildComponents();++i)if(auto* button=dynamic_cast<juce::TextButton*>(editor->getChildComponent(i));button && button->getButtonText()==name){button->onClick();return;}throw std::runtime_error("UI button missing");};
+            auto click=[&](const juce::String& name){for(int i=0;i<editor->getNumChildComponents();++i)if(auto* button=dynamic_cast<juce::TextButton*>(editor->getChildComponent(i));button && button->getButtonText()==tonedock::ui::text(name)){button->onClick();return;}throw std::runtime_error("UI button missing");};
+            juce::ComboBox* categories=nullptr;juce::ComboBox* effects=nullptr;juce::TextEditor* category=nullptr;
+            for(int i=0;i<editor->getNumChildComponents();++i){auto* child=editor->getChildComponent(i);
+                if(auto* combo=dynamic_cast<juce::ComboBox*>(child)){if(child->getX()<100)categories=combo;else effects=combo;}
+                if(auto* field=dynamic_cast<juce::TextEditor*>(child);field && child->getY()==editor->getHeight()-199)category=field;}
+            check(categories && effects && category,"localized category and effect controls exist");
+            check(effects->getText()==juce::String::fromUTF8("过载"),"effect chooser renders Chinese");
+            check(category->getText()==juce::String::fromUTF8("音箱"),"canonical library category renders Chinese");
+            click("Save tags");
+            auto savedEntry=guiProcessor.services->library.entries();
+            check(std::all_of(savedEntry.begin(),savedEntry.end(),[](const auto& e){return e.category=="Amplifier";}),"saving translated category preserves canonical values");
+            categories->setSelectedId(3,juce::sendNotificationSync);
+            check(categories->getText()==juce::String::fromUTF8("音箱") && libraryList->getNumRows()==2,"Chinese category filter uses canonical values");
+            search->setText(juce::String::fromUTF8("音箱"),false);search->onTextChange();
+            check(libraryList->getNumRows()==2,"Chinese category search finds canonical models");
+            search->setText("Amp",false);search->onTextChange();
             auto selected=guiProcessor.engine.chain()[1];
             for(int i=0;i<editor->getNumChildComponents();++i)if(auto* slider=dynamic_cast<juce::Slider*>(editor->getChildComponent(i));slider && slider->getSliderStyle()==juce::Slider::RotaryHorizontalVerticalDrag){slider->setValue(.7,juce::sendNotificationSync);break;}
             check(std::abs(selected.controls->values[0].load()-.7f)<.001,"UI knob controls audio parameter");
-            click("+ Add");check(guiProcessor.engine.chain().size()==5,"UI adds selected effect");
+            click("+ Add");check(guiProcessor.engine.chain().size()==5 && guiProcessor.engine.chain().back().type=="Drive","Chinese effect chooser adds canonical effect");
             click("Up");check(guiProcessor.engine.chain()[0].id==selected.id,"UI moves effect up");
             click("Enable / bypass");check(!selected.controls->enabled.load(),"UI bypasses effect");
             juce::DragAndDropTarget::SourceDetails drag(juce::var("stage:"+selected.id),editor.get(),juce::Point<int>(500,420));

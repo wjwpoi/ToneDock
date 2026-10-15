@@ -1,6 +1,7 @@
 #pragma once
 #include "Processor.h"
 #include "AuthFlow.h"
+#include "Localization.h"
 
 namespace tonedock {
 class Editor : public juce::AudioProcessorEditor, public juce::FileDragAndDropTarget,
@@ -29,11 +30,12 @@ private:
     juce::ListBox libraryList,chainList;
     juce::TextEditor search,categoryEdit,tagsEdit,link;
     juce::ComboBox categoryFilter,effectChoice;
-    juce::TextButton importButton{"Import"},cloudButton{"TONE3000"},loadButton{"Load model"},favoriteButton{"Favorite"},
-        metadataButton{"Save tags"},removeModelButton{"Remove"},addButton{"+ Add"},deleteButton{"Delete"},upButton{"Up"},downButton{"Down"},
-        bypassStageButton{"Enable / bypass"},audioButton{"Audio settings"},saveButton{"Save preset"},openButton{"Open preset"},linkButton{"Open link"};
+    juce::StringArray categoryValues;
+    juce::TextButton importButton{ui::text("Import")},cloudButton{ui::text("TONE3000")},loadButton{ui::text("Load model")},favoriteButton{ui::text("Favorite")},
+        metadataButton{ui::text("Save tags")},removeModelButton{ui::text("Remove")},addButton{ui::text("+ Add")},deleteButton{ui::text("Delete")},upButton{ui::text("Up")},downButton{ui::text("Down")},
+        bypassStageButton{ui::text("Enable / bypass")},audioButton{ui::text("Audio settings")},saveButton{ui::text("Save preset")},openButton{ui::text("Open preset")},linkButton{ui::text("Open link")};
     juce::Slider inputGain,outputGain;
-    juce::ToggleButton bypass{"Bypass"};
+    juce::ToggleButton bypass{ui::text("Bypass")};
     std::array<juce::Slider,4> knobs;std::array<juce::Label,4> knobLabels;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> inputAttachment,outputAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;

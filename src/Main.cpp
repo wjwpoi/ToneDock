@@ -7,6 +7,7 @@ public:
     const juce::String getApplicationVersion() override{return "0.1.0";}
     bool moreThanOneInstanceAllowed() override{return false;}
     void initialise(const juce::String& commandLine) override {
+        ui::installStandaloneTranslations();
         processor=std::make_unique<Processor>();
         auto session=defaultDataDirectory().getChildFile("last-session.tonedock");juce::MemoryBlock saved;
         if(session.existsAsFile() && session.getSize()<=1024*1024 && session.loadFileAsData(saved))processor->setStateInformation(saved.getData(),int(saved.getSize()));
@@ -56,7 +57,7 @@ private:
         if(!files.isEmpty())processor->importFiles(files);
     }
     void showAudioSettings() {
-        juce::DialogWindow::LaunchOptions options;options.dialogTitle="Audio interface / sample rate / buffer";
+        juce::DialogWindow::LaunchOptions options;options.dialogTitle=ui::text("Audio interface / sample rate / buffer");
         auto* selector=new juce::AudioDeviceSelectorComponent(devices,0,2,2,2,false,false,true,false);
         selector->setSize(600,480);options.content.setOwned(selector);options.componentToCentreAround=window.get();
         options.useNativeTitleBar=true;options.resizable=true;settingsWindow.reset(options.create());settingsWindow->setVisible(true);

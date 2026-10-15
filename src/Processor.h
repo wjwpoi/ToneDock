@@ -2,6 +2,7 @@
 #include "Engine.h"
 #include "Library.h"
 #include "Client.h"
+#include "Localization.h"
 
 namespace tonedock {
 struct Services {
@@ -28,7 +29,7 @@ public:
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
     void setCurrentProgram(int) override {}
-    const juce::String getProgramName(int) override { return "Default"; }
+    const juce::String getProgramName(int) override { return ui::text("Default"); }
     void changeProgramName(int,const juce::String&) override {}
     void getStateInformation(juce::MemoryBlock&) override;
     void setStateInformation(const void*,int) override;

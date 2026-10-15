@@ -32,8 +32,8 @@ namespace t3k
         std::function<void (juce::String query)> onCallback;
 
         /// Text shown in the browser after the redirect.
-        juce::String landingTitle { "You're all set" };
-        juce::String landingMessage { "You can close this tab and return to the app." };
+        juce::String landingTitle { juce::String::fromUTF8("已接收授权回调") };
+        juce::String landingMessage { juce::String::fromUTF8("可以关闭此页面，返回 ToneDock 查看连接结果。") };
 
     private:
         void run() override;
