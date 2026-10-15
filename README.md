@@ -4,7 +4,7 @@ Windows / macOS 的 NAM 模型加载与综合软件效果器。提供独立运�
 
 本仓库独立维护 ToneDock 软件，保留软件开发历史与第三方许可。拆分来源见 [迁移说明](docs/MIGRATION.md)。
 
-Windows/macOS 自动构建与开发包见 [本仓库 Actions](https://github.com/wjwpoi/ToneDock/actions/workflows/tonedock.yml)；开发包在对应运行成功后生成，尚非正式发行版。
+Windows 免安装 EXE / ZIP 和 macOS 开发包见 [本仓库 Actions](https://github.com/wjwpoi/ToneDock/actions/workflows/tonedock.yml)。Windows 下载 `ToneDock-Windows-portable`，解压其中的便携 ZIP 后直接打开根目录 `ToneDock.exe`；也可运行单独的 EXE。无需本地编译或安装 Visual C++ 运行库。使用说明见 [Windows 便携版](packaging/PORTABLE-WINDOWS.md)。
 
 当前为首版工程。Linux 云端用于编译与自动测试；Windows/macOS 原生构建、DAW 扫描、声卡实测与真实 TONE3000 账号联调分别记录，不用云端编译替代平台验收。见 [验证状态](docs/VALIDATION.md)。
 
@@ -15,7 +15,7 @@ Windows/macOS 自动构建与开发包见 [本仓库 Actions](https://github.com
 - 模型复制到统一库目录，独立软件与同一用户的插件共享；从原下载文件夹移走文件不影响已导入模型。库索引使用跨进程锁与原子替换；从列表移除不会删除预设仍可能使用的模型文件。
 - TONE3000 OAuth PKCE 登录、浏览器选取后回传、最新/热门/个人收藏/创建/下载列表，逐个捕获下载入库，保留作者、来源、许可证和标签。原生界面不提供需要商业协议的全站搜索。
 - `.nam` 和 IR 拖入；TONE3000 页面链接拖入或粘贴；`tonedock://tone/42` 唤起独立软件。网页选取使用官方 OAuth 回调；任意第三方网页上的“发送到软件”需要其提供链接，或使用附带的 [发送页](packaging/send-to-tonedock.html)。不假设 TONE3000 已有 ToneDock 专用按钮。
-- 最多16个内置效果，可添加、删除、旁通、拖动及上移/下移排序。Gate、Compressor、Drive、NAM、Cabinet IR、EQ、Chorus、Delay、Reverb、Gain。
+- 最多16个内置效果，横向效果卡片与整链总览，支持添加、复制、删除、旁通、拖动及前移/后移排序；固定参数区编辑选中的效果。Gate、Compressor、Drive、NAM、Cabinet IR、EQ、Chorus、Delay、Reverb、Gain。
 - 输入/输出增益、峰值表、全局旁通、独立版音频设备/采样率/缓冲设置、预设文件与 DAW 工程状态保存。
 - NAM 加载和预热、库导入及下载在后台；结构编辑准备新图后交叉淡化，旧图在非音频线程回收。模型采样率与宿主不同时采用 Lanczos 重采样，并向宿主报告额外 DSP 延迟；总演奏延迟仍由声卡、驱动、缓冲和模型计算决定。
 
@@ -47,13 +47,15 @@ Debian云端开发可从仓库根目录运行 `bash tools/cloud_build.sh`，它�
 
 默认界面为简体中文，覆盖效果参数、模型库、音频设置与 TONE3000 连接提示。模型名称、作者、许可证及自定义标签保留来源内容；效果和分类的内部标识保持兼容已有预设。
 
-1. 启动独立版，在 Audio settings 选择吉他声卡输入、输出与缓冲；新安装默认不启用麦克风输入。插件版的音频设备由 DAW 管理。
-2. 拖入 `.nam` 或 IR，选择模型后点 Load model。NAM 模型加载到第一个 NAM 位置，IR 加载到第一个 Cabinet IR 位置；后续版本再支持明确指定多个同类位置。
-3. 从效果选择框添加效果，拖动行或点 Up / Down 调整顺序，选中效果调节下方旋钮。
+1. 启动独立版，在「设备」页选择驱动、吉他所在单声道输入、立体声输出对、采样率与缓冲。设备页与效果链共用深色样式；新安装默认不启用麦克风输入。插件版的音频设备由 DAW 管理。
+2. 拖入 `.nam` 或 IR，先选中目标 NAM / 箱体 IR 卡片，再选择库中的模型并点「加载模型」。未选中同类卡片时会使用第一个同类位置，缺少该类位置时自动添加。
+3. 从效果选择框添加效果，拖动卡片或点「前移 / 后移」调整顺序。卡片超出窗口时横向滚动；上方总览可直接跳转到任意位置。选中卡片后调节下方旋钮。
 4. TONE3000 首次连接需要应用的 `t3k_pub_...` publishable key，可在 TONE3000 Settings → API Keys 创建，在窗口输入一次。它是客户端公开标识，不是账户密码或 `t3k_cs_` secret。登录令牌在 macOS Keychain / Windows DPAPI 中保存，不写入预设。
 5. 在浏览器选择 tone，回到软件检查作者和许可，选择具体捕获下载。导入验证完成后出现在本地模型库，可离线使用。
 
 库默认在 `%APPDATA%/ToneDock`（Windows）或 `~/Library/Application Support/ToneDock`（macOS）。可通过 `TONEDOCK_DATA_DIR` 指定其他位置。独立软件保存并恢复上次退出时的链路，库变更会在打开的编辑器内刷新。跨电脑转移预设时也需要转移对应的 `models/` 文件；预设引用内容 ID，不内嵌或重新分发第三方模型权重。
+
+CI 在构建与测试通过后生成可分发的 Windows ZIP、独立 EXE 和 SHA256SUMS，检查 EXE / VST3 的运行库依赖，再从 ZIP 解压运行实际 EXE 并生成原生界面预览。推送与工程版本一致的 `vX.Y.Z` 标签会准备带附件的 GitHub Release 草稿，审核后再发布。
 
 ## 首版边界
 

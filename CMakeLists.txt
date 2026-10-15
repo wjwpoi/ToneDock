@@ -2,10 +2,12 @@ cmake_minimum_required(VERSION 3.24)
 if(APPLE)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS")
 endif()
-project(ToneDock VERSION 0.1.0 LANGUAGES C CXX)
+project(ToneDock VERSION 0.2.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(MSVC)
+  # The portable EXE must run without a separate Visual C++ redistributable.
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
   # Chinese UI strings are UTF-8 on every Windows build host.
   add_compile_options(/utf-8)
 endif()
@@ -66,7 +68,7 @@ endif()
 juce_add_gui_app(ToneDockApp PRODUCT_NAME "ToneDock" COMPANY_NAME "ToneDock" BUNDLE_ID "org.tonedock.app"
   MICROPHONE_PERMISSION_ENABLED TRUE MICROPHONE_PERMISSION_TEXT "ToneDock processes audio from your guitar interface."
   PLIST_TO_MERGE "${CMAKE_CURRENT_SOURCE_DIR}/packaging/Info.plist")
-target_sources(ToneDockApp PRIVATE src/Main.cpp)
+target_sources(ToneDockApp PRIVATE src/Main.cpp src/AudioSettings.cpp)
 add_library(tonedock_link_only INTERFACE)
 target_link_libraries(tonedock_link_only INTERFACE "$<LINK_ONLY:ToneDock>")
 function(tonedock_link_application target)

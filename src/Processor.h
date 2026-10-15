@@ -34,7 +34,7 @@ public:
     void getStateInformation(juce::MemoryBlock&) override;
     void setStateInformation(const void*,int) override;
     void addEffect(const juce::String& type);
-    void loadModel(const ModelEntry&);
+    void loadModel(const ModelEntry&,const juce::String& targetStageId={});
     void importFiles(juce::StringArray);
     void importDownloaded(juce::File,juce::var provenance);
     void downloadModel(t3k::Model,juce::var provenance,std::function<void(juce::String)> completion={});
@@ -47,7 +47,7 @@ public:
     std::atomic<float> inputPeak{0},outputPeak{0};
     std::atomic<int> libraryVersion{0};
     std::function<void(int)> onOpenTone;
-    std::function<void()> onAudioSettings;
+    std::function<std::unique_ptr<juce::Component>()> createAudioSettings;
 private:
     void timerCallback() override;
     static juce::AudioProcessorValueTreeState::ParameterLayout makeParameters();
