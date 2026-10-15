@@ -269,7 +269,7 @@ void Editor::paint(juce::Graphics& g) {
     g.setColour(muted);g.setFont(ui::font(12));g.drawText(ui::text("你的音色，你的声音。"),26,51,230,20,juce::Justification::centredLeft);
     g.setColour(ui::line);g.drawHorizontalLine(80,0,float(w));
     if(!devicePageVisible){
-        ui::card(g,{16,98,298,h-154});ui::card(g,{x,444,rw,h-594});ui::card(g,{x,h-134,rw,82});
+        ui::card(g,{16,98,298,h-140});ui::card(g,{x,444,rw,h-594});ui::card(g,{x,h-134,rw,82});
         g.setColour(ink);g.setFont(ui::font(19));g.drawText(ui::text("模型库"),30,110,150,28,juce::Justification::centredLeft);
         g.drawText(ui::text("效果链"),x,105,150,30,juce::Justification::centredLeft);
         g.setColour(muted);g.setFont(ui::font(13));g.drawText(juce::String(visibleChain.size())+" / 16  ·  "+ui::text("拖动排序，点击编辑参数"),x,140,400,24,juce::Justification::centredLeft);
@@ -306,12 +306,19 @@ void Editor::resized() {
     link.setBounds(30,h-86,184,30);linkButton.setBounds(222,h-86,78,30);
     inputGain.setBounds(x+65,h-124,rw/2-140,36);outputGain.setBounds(x+rw/2+14,h-124,rw/2-180,36);bypass.setBounds(w-158,h-115,130,30);
 }
-void Editor::loadSelectedModel(){auto row=libraryList.getSelectedRow();if(row>=0 && row<int(filtered.size())){processor.loadModel(filtered[size_t(row)],selectedStageId);syncChain();}}
+void Editor::loadSelectedModel(){auto row=libraryList.getSelectedRow();if(row>=0 && row<int(filtered.size())){
+    auto type=filtered[size_t(row)].kind=="ir"?juce::String("Cabinet IR"):juce::String("NAM");auto target=selectedStageId;
+    auto selected=std::find_if(visibleChain.begin(),visibleChain.end(),[&](const auto& s){return s.id==target && s.type==type;});
+    if(selected==visibleChain.end()){target.clear();for(auto& s:visibleChain)if(s.type==type){target=s.id;break;}}
+    processor.loadModel(filtered[size_t(row)],target);syncChain();
+    for(size_t i=0;i<visibleChain.size();++i)if(visibleChain[i].type==type && (target.isEmpty() || visibleChain[i].id==target)){selectStage(int(i));break;}
+}}
 void Editor::syncChain() {
     visibleChain=processor.engine.chain();board->rebuild();overview.clear();
     for(size_t i=0;i<visibleChain.size();++i){auto b=std::make_unique<juce::TextButton>(juce::String(int(i)+1).paddedLeft('0',2)+(visibleChain.size()<=8?"  "+ui::text(visibleChain[i].type):juce::String()));b->setComponentID("overview:"+visibleChain[i].id);b->setTooltip(ui::text(visibleChain[i].type)+" · "+visibleChain[i].title);b->onClick=[this,i]{selectStage(int(i));};addAndMakeVisible(*b);b->setVisible(!devicePageVisible);overview.push_back(std::move(b));}
     bool found=false;for(size_t i=0;i<visibleChain.size();++i)if(visibleChain[i].id==selectedStageId){selectStage(int(i));found=true;break;}
     if(!found){selectedStageId.clear();if(!visibleChain.empty())selectStage(0);else for(int i=0;i<4;++i){knobs[size_t(i)].setVisible(false);knobLabels[size_t(i)].setVisible(false);}}
+    if(visibleChain.empty()){upButton.setEnabled(false);downButton.setEnabled(false);}
     addButton.setEnabled(visibleChain.size()<16);duplicateButton.setEnabled(!visibleChain.empty() && visibleChain.size()<16);deleteButton.setEnabled(!visibleChain.empty());bypassStageButton.setEnabled(!visibleChain.empty());resized();repaint();
 }
 void Editor::moveStage(int direction){editChain([&](auto& chain){for(int i=0;i<int(chain.size());++i)if(chain[size_t(i)].id==selectedStageId){auto to=i+direction;if(to>=0 && to<int(chain.size()))std::swap(chain[size_t(i)],chain[size_t(to)]);break;}});}
@@ -346,7 +353,7 @@ void Editor::selectModel(int row) {
 void Editor::selectStage(int row) {
     if(row<0 || row>=int(visibleChain.size()))return;auto& s=visibleChain[size_t(row)];selectedStageId=s.id;auto names=parameterNames(s.type);
     for(int i=0;i<4;++i){auto& k=knobs[size_t(i)];k.setEnabled(i<names.size());k.setVisible(!devicePageVisible && i<names.size());knobLabels[size_t(i)].setVisible(!devicePageVisible && i<names.size());knobLabels[size_t(i)].setText(i<names.size()?names[i]:"",juce::dontSendNotification);
-        k.textFromValueFunction=[t=s.type,i](double value){return parameterText(t,i,value);};k.setValue(s.controls->values[size_t(i)].load(),juce::dontSendNotification);}
+        k.textFromValueFunction=[t=s.type,i](double value){return parameterText(t,i,value);};k.setValue(s.controls->values[size_t(i)].load(),juce::dontSendNotification);k.updateText();}
     for(size_t i=0;i<overview.size();++i)overview[i]->setToggleState(int(i)==row,juce::dontSendNotification);
     int left=12+row*200,right=left+176,view=chainViewport.getViewPositionX(),width=chainViewport.getMaximumVisibleWidth();
     if(left<view)chainViewport.setViewPosition(left,0);else if(right>view+width)chainViewport.setViewPosition(right-width+12,0);

@@ -47,7 +47,7 @@ public:
     juce::Font getComboBoxFont(juce::ComboBox&) override{return font(14);}
     juce::Font getLabelFont(juce::Label& label) override{return font(label.getFont().getHeight());}
     juce::Font getPopupMenuFont() override{return font(14);}
-    void drawButtonBackground(juce::Graphics& g,juce::TextButton& b,const juce::Colour& c,bool hover,bool down) override {
+    void drawButtonBackground(juce::Graphics& g,juce::Button& b,const juce::Colour& c,bool hover,bool down) override {
         auto area=b.getLocalBounds().toFloat().reduced(.5f);
         g.setColour(c.withMultipliedAlpha(b.isEnabled()?1.f:.4f).brighter(down?.12f:hover?.06f:0.f));
         g.fillRoundedRectangle(area,7);g.setColour(b.getToggleState()?accent:line);g.drawRoundedRectangle(area,7,1);

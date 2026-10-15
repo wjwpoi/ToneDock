@@ -134,7 +134,7 @@ int main(){
             press("bypass-effect");check(!selected.controls->enabled.load(),"UI bypasses effect");
             auto* viewport=dynamic_cast<juce::Viewport*>(child("chain-viewport"));check(viewport!=nullptr,"horizontal chain viewport exists");
             viewport->setViewPosition(0,0);
-            juce::DragAndDropTarget::SourceDetails drag(juce::var("stage:"+selected.id),editor.get(),juce::Point<int>(viewport->getX()+710,viewport->getY()+90));
+            juce::DragAndDropTarget::SourceDetails drag(juce::var("stage:"+selected.id),editor.get(),juce::Point<int>(viewport->getX()+750,viewport->getY()+90));
             editor->itemDropped(drag);check(guiProcessor.engine.chain()[3].id==selected.id,"horizontal drag reorders actual effect chain");
             press("duplicate-effect");auto duplicated=guiProcessor.engine.chain()[4];
             check(duplicated.id!=selected.id && duplicated.file==selected.file && duplicated.controls!=selected.controls,"duplicate creates independent controls with the same model");

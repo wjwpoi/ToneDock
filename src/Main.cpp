@@ -18,7 +18,7 @@ public:
         // A browser protocol invocation cannot enable developer CLI switches.
         if(!commandLine.containsIgnoreCase("tonedock://"))
             for(auto& token:tokens)if(token.startsWith("--screenshot="))screenshot=juce::File(token.fromFirstOccurrenceOf("=",false,false).unquoted());
-        if(screenshot==juce::File() && !tokens.contains("--no-audio")) {
+        if((screenshot==juce::File() || tokens.contains("--audio-preview")) && !tokens.contains("--no-audio")) {
             auto settings=juce::parseXML(defaultDataDirectory().getChildFile("audio-device.xml"));
             auto error=devices.initialise(0,2,settings.get(),true);
             if(error.isNotEmpty())processor->setMessage("Audio device: "+error+". Choose Audio settings.");
