@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 
 parser=argparse.ArgumentParser()
-parser.add_argument('--build',type=Path,default=Path('ToneDock/build'))
+parser.add_argument('--build',type=Path,default=Path(__file__).resolve().parents[1]/'build')
 parser.add_argument('--juce',type=Path)
 parser.add_argument('--nam',type=Path)
 args=parser.parse_args()

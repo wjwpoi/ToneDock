@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-15T18:25:57.124184+08:00",
+  "generatedAt": "2026-10-15T19:53:13.896335+08:00",
   "version": "0.1.0-development",
   "platform": "Linux x86_64 cloud",
   "compiler": "GCC 14.2.0",
@@ -7,7 +7,7 @@
     "nativeBuild": "passed: standalone and Linux VST3",
     "automatedSuites": 1,
     "automatedSuitesPassed": 1,
-    "assertionsPassed": 49860,
+    "assertionsPassed": 49858,
     "upstreamReferenceMaximumError": {
       "LSTM": 0,
       "WaveNet": 0,
@@ -27,6 +27,7 @@
     "macOSDevelopmentArchive": "passed on native macOS: tar.gz with executable modes and symlinks generated and uploaded"
   },
   "notVerified": [
+    "Windows/macOS workflow under the standalone repository root (publication pending)",
     "Windows/macOS DAW scans and physical audio interface checks",
     "Intel macOS runtime (universal binary built; AU validation ran on the macos-14 arm64 runner)",
     "native protocol registration on Windows/macOS",
@@ -72,6 +73,31 @@
     "Windows": "completed successfully: standalone/VST3 build, core tests, development artifacts",
     "macOS": "completed successfully: universal standalone/VST3/AU build, core tests, full AU validation, macOS archive and artifact upload",
     "auDiscovery": "user-directory install, ad-hoc signature verification, registrar refresh, bounded discovery wait before one full auval invocation",
-    "validatedRuntime": "macos-14 arm64 runner; arm64/x86_64 universal binaries built"
+    "validatedRuntime": "macos-14 arm64 runner; arm64/x86_64 universal binaries built",
+    "scope": "pre-split source baseline in DaisySeedProjects; standalone repository native workflow has not run"
+  },
+  "migration": {
+    "sourceRepository": "https://github.com/wjwpoi/DaisySeedProjects",
+    "sourceCommit": "2c972a8951a8cb573835550c9c56b388f8d858f2",
+    "sourceSubdirectory": "ToneDock/",
+    "preservedSoftwareCommits": 8,
+    "sourceFilesIdentical": 33,
+    "standaloneRootBuild": "passed: Linux standalone, VST3, core test target",
+    "rootlessCloudSetupScript": "passed from standalone root with existing pinned dependency cache",
+    "coreTests": {
+      "suites": 1,
+      "suitesPassed": 1,
+      "assertionsPassed": 49858
+    },
+    "standaloneFunctionalCheck": {
+      "exitCode": 0,
+      "pngSize": [
+        1140,
+        810
+      ]
+    },
+    "ciReporter": "passed: invoked outside repo, error exit code 7 and bounded annotation preserved",
+    "macOSArchiveFixture": "passed: executable modes, symlinks and standalone documentation preserved",
+    "sourcePublication": "pending: new GitHub repository URL required; API creation blocked by network policy"
   }
 }

@@ -1,6 +1,8 @@
 # ToneDock
 
-Windows / macOS 的 NAM 模型加载与综合软件效果器。提供独立运行版、VST3，及 macOS AU。硬件方案暂缓，新软件使用原生 C++ / JUCE 和官方 NeuralAmpModelerCore，不再限制为硬件版的固定 A2 Lite 拓扑。
+Windows / macOS 的 NAM 模型加载与综合软件效果器。提供独立运行版、VST3，及 macOS AU，使用原生 C++ / JUCE 和官方 NeuralAmpModelerCore。
+
+本仓库独立维护 ToneDock 软件，保留软件开发历史与第三方许可。拆分来源见 [迁移说明](docs/MIGRATION.md)。
 
 当前为首版工程。Linux 云端用于编译与自动测试；Windows/macOS 原生构建、DAW 扫描、声卡实测与真实 TONE3000 账号联调分别记录，不用云端编译替代平台验收。见 [验证状态](docs/VALIDATION.md)。
 
@@ -22,20 +24,22 @@ Windows / macOS 的 NAM 模型加载与综合软件效果器。提供独立运�
 Windows：Visual Studio 2022 的 Desktop development with C++ 和 Windows SDK。
 
 ```powershell
-cmake -S ToneDock -B ToneDock/build -A x64 -DBUILD_TESTING=ON
-cmake --build ToneDock/build --config Release --parallel 2
-ctest --test-dir ToneDock/build -C Release --output-on-failure
+cmake -S . -B build -A x64 -DBUILD_TESTING=ON
+cmake --build build --config Release --parallel 2
+ctest --test-dir build -C Release --output-on-failure --no-tests=error
 ```
 
 macOS：Xcode Command Line Tools。Universal 构建同时包含 Apple Silicon 与 Intel；需要时可仅设置本机架构缩短编译。
 
 ```sh
-cmake -S ToneDock -B ToneDock/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES='arm64;x86_64'
-cmake --build ToneDock/build --config Release --parallel 2
-ctest --test-dir ToneDock/build -C Release --output-on-failure
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES='arm64;x86_64' -DBUILD_TESTING=ON
+cmake --build build --config Release --parallel 2
+ctest --test-dir build -C Release --output-on-failure --no-tests=error
 ```
 
 产物位于 `build/ToneDockApp_artefacts/<配置>/` 和 `build/ToneDock_artefacts/<配置>/{VST3,AU}/`。构建用于开发测试，CI为AU添加ad-hoc签名；正式分发的签名、公证和安装验收尚未完成。参见 [安装与网页唤起](docs/INSTALL.md)。
+
+Debian云端开发可从仓库根目录运行 `bash tools/cloud_build.sh`，它使用工作区内的固定依赖与工具链，完成Linux编译和现有测试；这不替代Windows/macOS验收。
 
 ## 使用
 

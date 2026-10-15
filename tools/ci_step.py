@@ -15,7 +15,7 @@ args=parser.parse_args()
 command=args.command[1:] if args.command[:1]==['--'] else args.command
 if not command:parser.error('missing command')
 sys.stdout.reconfigure(encoding='utf-8',errors='replace')
-log=Path('ToneDock/build/ci-logs')/(re.sub(r'[^a-z0-9]+','-',args.label.lower()).strip('-')+'.log')
+log=Path(__file__).resolve().parents[1]/'build/ci-logs'/(re.sub(r'[^a-z0-9]+','-',args.label.lower()).strip('-')+'.log')
 log.parent.mkdir(parents=True,exist_ok=True)
 tail=collections.deque(maxlen=100)
 with log.open('w',encoding='utf-8') as output:

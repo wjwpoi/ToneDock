@@ -3,3 +3,5 @@ build*/
 .env
 *.user
 *.VC.db
+__pycache__/
+*.pyc

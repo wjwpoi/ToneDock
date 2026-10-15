@@ -1,0 +1,61 @@
+name: ToneDock desktop
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Configure Windows
+        if: runner.os == 'Windows'
+        run: cmake -S . -B build -A x64 -DBUILD_TESTING=ON
+      - name: Configure macOS universal
+        if: runner.os == 'macOS'
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES='arm64;x86_64' -DBUILD_TESTING=ON
+      - name: Build standalone and plugins
+        run: python tools/ci_step.py "Build standalone and plugins" -- cmake --build build --config Release --parallel 2
+      - name: Audio and library tests
+        run: python tools/ci_step.py "Audio and library tests" -- ctest --test-dir build -C Release --output-on-failure --no-tests=error
+      - name: Package dependency notices
+        run: python tools/package_notices.py --build build
+      - name: Validate AU
+        if: runner.os == 'macOS'
+        run: python tools/ci_step.py "Validate AU" -- bash tools/validate_au.sh build/ToneDock_artefacts/Release/AU/ToneDock.component
+      - name: Archive macOS bundles with executable permissions
+        if: runner.os == 'macOS'
+        run: python tools/ci_step.py "Archive macOS bundles" -- python tools/package_macos.py --build build
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ToneDock-${{ runner.os }}-diagnostics
+          path: build/ci-logs/
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: ToneDock-${{ runner.os }}-development
+          path: |
+            build/ToneDockApp_artefacts/Release/
+            build/ToneDock_artefacts/Release/VST3/
+            build/ToneDock_artefacts/Release/AU/
+            packaging/
+            build/notices/
+            README.md
+            LICENSE
+            docs/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'macOS'
+        with:
+          name: ToneDock-macOS-development
+          path: build/ToneDock-macOS-development.tar.gz
+          if-no-files-found: error

@@ -7,7 +7,7 @@
 对独立软件执行以下脚本注册当前用户的 URL 协议，不需要改系统级注册表：
 
 ```powershell
-pwsh -File ToneDock/packaging/register-protocol.ps1 -Executable 'C:\Your Folder\ToneDock.exe'
+pwsh -File packaging/register-protocol.ps1 -Executable 'C:\Your Folder\ToneDock.exe'
 ```
 
 浏览器第一次打开 `tonedock://tone/42` 会请求是否允许调用本机软件。链接只接受正整数 tone ID，经官方 API 和账号授权取得模型；不执行链接中的命令，不将任意远端文件作为程序运行。

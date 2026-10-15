@@ -5,7 +5,7 @@ import tarfile
 from pathlib import Path
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--build', type=Path, default=Path('ToneDock/build'))
+parser.add_argument('--build', type=Path, default=Path(__file__).resolve().parents[1] / 'build')
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 build = args.build.resolve()

@@ -76,6 +76,6 @@ cmake -S "$deps_root/JUCE" -B "$project_root/build/_deps/juce-build/tools" -G Ni
 cmake -S "$project_root" -B "$project_root/build" -G Ninja \
   -DCMAKE_MAKE_PROGRAM="$deps_root/python/bin/ninja" -DCMAKE_BUILD_TYPE=Release \
   -DFETCHCONTENT_SOURCE_DIR_JUCE="$deps_root/JUCE" -DFETCHCONTENT_SOURCE_DIR_NAM="$deps_root/nam" \
-  -DCMAKE_PREFIX_PATH="$deps_root/sysroot/usr"
+  -DCMAKE_PREFIX_PATH="$deps_root/sysroot/usr" -DBUILD_TESTING=ON
 cmake --build "$project_root/build" --config Release --parallel 2
-xvfb-run -a ctest --test-dir "$project_root/build" --output-on-failure
+xvfb-run -a ctest --test-dir "$project_root/build" --output-on-failure --no-tests=error
