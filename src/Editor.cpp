@@ -193,7 +193,9 @@ Editor::Editor(Processor& p):AudioProcessorEditor(p),processor(p) {
         try{auto m=filtered[size_t(row)];m.favorite=!m.favorite;processor.services->library.update(m);++processor.libraryVersion;}
         catch(const std::exception& e){processor.setMessage(e.what());}};
     metadataButton.onClick=[this]{auto row=libraryList.getSelectedRow();if(row<0 || row>=int(filtered.size()))return;
-        try{auto m=filtered[size_t(row)];m.category=ui::categoryValue(categoryEdit.getText().trim());m.tags=juce::StringArray::fromTokens(tagsEdit.getText(),",","");m.tags.trim();m.tags.removeEmptyStrings();processor.services->library.update(m);++processor.libraryVersion;}
+        try{auto m=filtered[size_t(row)];auto category=categoryEdit.getText().trim();
+            if(category!=ui::categoryLabel(m.category))m.category=ui::categoryValue(category);
+            m.tags=juce::StringArray::fromTokens(tagsEdit.getText(),",","");m.tags.trim();m.tags.removeEmptyStrings();processor.services->library.update(m);++processor.libraryVersion;}
         catch(const std::exception& e){processor.setMessage(e.what());}};
     removeModelButton.onClick=[this]{auto row=libraryList.getSelectedRow();if(row<0 || row>=int(filtered.size()))return;
         try{processor.services->library.remove(filtered[size_t(row)].id);++processor.libraryVersion;}catch(const std::exception& e){processor.setMessage(e.what());}};

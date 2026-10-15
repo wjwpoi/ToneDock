@@ -118,10 +118,16 @@ int main(){
             click("Save tags");
             auto savedEntry=guiProcessor.services->library.entries();
             check(std::all_of(savedEntry.begin(),savedEntry.end(),[](const auto& e){return e.category=="Amplifier";}),"saving translated category preserves canonical values");
+            auto custom=guiProcessor.services->library.importFile(extra);custom.category=juce::String::fromUTF8("音箱");guiProcessor.services->library.update(custom);
+            search->onTextChange();libraryList->selectRow(0);click("Save tags");
+            savedEntry=guiProcessor.services->library.entries();
+            auto customSaved=std::find_if(savedEntry.begin(),savedEntry.end(),[&](const auto& e){return e.id==custom.id;});
+            check(customSaved!=savedEntry.end() && customSaved->category==custom.category,"saving a custom category that matches a translation preserves its value");
+            custom.category="Amplifier";guiProcessor.services->library.update(custom);search->onTextChange();
             categories->setSelectedId(3,juce::sendNotificationSync);
-            check(categories->getText()==juce::String::fromUTF8("音箱") && libraryList->getNumRows()==2,"Chinese category filter uses canonical values");
+            check(categories->getText()==juce::String::fromUTF8("音箱") && libraryList->getModel()->getNumRows()==2,"Chinese category filter uses canonical values");
             search->setText(juce::String::fromUTF8("音箱"),false);search->onTextChange();
-            check(libraryList->getNumRows()==2,"Chinese category search finds canonical models");
+            check(libraryList->getModel()->getNumRows()==2,"Chinese category search finds canonical models");
             search->setText("Amp",false);search->onTextChange();
             auto selected=guiProcessor.engine.chain()[1];
             for(int i=0;i<editor->getNumChildComponents();++i)if(auto* slider=dynamic_cast<juce::Slider*>(editor->getChildComponent(i));slider && slider->getSliderStyle()==juce::Slider::RotaryHorizontalVerticalDrag){slider->setValue(.7,juce::sendNotificationSync);break;}
