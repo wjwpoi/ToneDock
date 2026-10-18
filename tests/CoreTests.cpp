@@ -6,6 +6,7 @@
 #include <cmath>
 #include <iostream>
 #include <thread>
+#include "CatalogTests.h"
 
 namespace {
 int checks=0;
@@ -25,6 +26,7 @@ int main(){
 #endif
     try {
         check(tonedock::ui::text("效果链")==juce::String::fromUTF8("效果链"),"UTF-8 literal labels do not become Latin-1 mojibake");
+        testCatalog(check);
         check(tonedock::parseToneLink("tonedock://tone/42")==42,"custom protocol");
         check(tonedock::parseToneLink("https://www.tone3000.com/tones/test-amp-42")==42,"tone page");
         for(auto link:juce::StringArray{"tonedock://tone/0","tonedock://tone/42/extra","https://evil.test/tones/42","javascript:alert(1)","https://www.tone3000.com.evil.test/tones/42","tonedock://tone/999999999999999"})check(!tonedock::parseToneLink(link),"reject invalid links");
@@ -152,8 +154,12 @@ int main(){
             press("audio-page");check(child("device-content")->isVisible() && !viewport->isVisible(),"plugin device tab displays host settings explanation");
             press("work-page");check(viewport->isVisible() && !child("device-content")->isVisible(),"returning from device tab restores pedalboard");
             press("delete-effect");check(child("add-effect")->isEnabled(),"deleting from full chain permits adding again");
+            press("online-page");auto* online=child("online-browser");check(online && online->isVisible() && viewport->isVisible() && viewport->getX()>=440,"online catalog and effect chain remain visible together");
+            for(int i=0;i<online->getNumChildComponents();++i){auto* c=online->getChildComponent(i);if(c->isVisible())check(online->getLocalBounds().contains(c->getBounds()),"online catalog controls fit the compact sidebar");}
+            press("work-page");check(!online->isVisible() && viewport->getX()==336,"local library layout returns after online browsing");
 
         }
+        testOnlineLoading(directory,fixture,invalid,check);
         std::cout<<"PASS "<<checks<<" checks\n";return 0;
     }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<" checks: "<<e.what()<<"\n";return 1;}
 }

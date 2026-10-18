@@ -67,6 +67,8 @@ namespace t3k
         void getTone (int id, Callback<Tone> done);
         /// The tone plus its A2 models, in one call.
         void getToneWithModels (int id, Callback<ToneWithModels> done);
+        /// A2 plus A1/Custom captures, deduplicated by model ID. Non-NAM formats use one stream.
+        void getToneWithAllModels(int id,Callback<ToneWithModels> done);
         void searchTones (SearchTonesParams params, Callback<Page<Tone>> done);
         void listCreatedTones (ListLibraryParams params, Callback<Page<Tone>> done);
         void listFavoritedTones (ListLibraryParams params, Callback<Page<Tone>> done);
@@ -82,6 +84,7 @@ namespace t3k
 
         /// All A2 models of a tone (page_size 100).
         void listModels (int toneId, Callback<juce::Array<Model>> done);
+        void listModelsForArchitecture(int toneId,juce::String architecture,Callback<juce::Array<Model>> done);
         /// Download a model file (Bearer auth) into the local cache; returns the file.
         void downloadModelFile (const Model& model, Callback<juce::File> done);
 
@@ -124,7 +127,7 @@ namespace t3k
                       std::function<T (const juce::var&)> parse, Callback<T> done);
 
         Tokens currentTokens() const;
-        void listModelsPage(int toneId,int page,juce::Array<Model> collected,Callback<juce::Array<Model>> done);
+        void listModelsPage(int toneId,juce::String architecture,int page,juce::Array<Model> collected,Callback<juce::Array<Model>> done);
         void storeTokens (const Tokens& t, bool notify);
 
         juce::String origin, key;

@@ -30,6 +30,7 @@ def main():
             ('pedalboard', [], (1360, 880)),
             ('long-chain-compact', ['--preview-chain', '--compact'], (1120, 780)),
             ('devices', ['--device-page'], (1360, 880)),
+            ('catalog', ['--catalog-page'], (1360, 880)),
         ):
             target = screenshots/f'{name}.png'
             env = {**os.environ, 'TONEDOCK_DATA_DIR': str(directory/f'data-{name}')}

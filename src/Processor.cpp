@@ -23,6 +23,8 @@ Processor::Processor() : AudioProcessor(BusesProperties().withInput("Input",juce
     .withOutput("Output",juce::AudioChannelSet::stereo(),true)),parameters(*this,nullptr,"ToneDock",makeParameters()) {
     inputParameter=parameters.getRawParameterValue("input");outputParameter=parameters.getRawParameterValue("output");bypassParameter=parameters.getRawParameterValue("bypass");
     for(auto& type:juce::StringArray{"Gate","NAM","Cabinet IR","EQ"})addEffect(type);
+    onlineSource.resolve=[this](int id,t3k::Callback<t3k::ToneWithModels> done){services->tone3000.getToneWithAllModels(id,std::move(done));};
+    onlineSource.download=[this](const t3k::Model& m,t3k::Callback<juce::File> done){services->tone3000.downloadModelFile(m,std::move(done));};
     startTimerHz(10);
 }
 Processor::~Processor() { stopTimer();imports.removeAllJobs(true,-1); }
@@ -111,8 +113,63 @@ void Processor::downloadModel(t3k::Model model,juce::var provenance,std::functio
     }));
 }
 void Processor::openToneLink(juce::String link) {
-    if(auto id=parseToneLink(link)){if(onOpenTone)onOpenTone(*id);else setMessage("Open the ToneDock editor to load this TONE3000 link");}
+    if(auto id=parseToneLink(link)){if(services->tone3000.isConnected())loadOnlineTone(*id);else if(onOpenTone)onOpenTone(*id);else setMessage("Open the ToneDock editor to load this TONE3000 link");}
     else setMessage("Use a TONE3000 tone page or tonedock://tone/<numeric-id>");
+}
+void Processor::loadOnlineTone(int toneId,const juce::String& target,int modelId,OnlineCompletion completion) {
+    auto failEarly=[&](juce::String s){setMessage(s);if(completion)completion(false,std::move(s));};
+    auto initial=engine.chain();
+    if(toneId<=0){failEarly(ui::text("无效的音色编号"));return;}
+    if(target.isEmpty() && initial.size()>=16){failEarly(ui::text("Maximum 16 effects"));return;}
+    if(target.isNotEmpty() && std::none_of(initial.begin(),initial.end(),[&](const auto& s){return s.id==target;})){failEarly(ui::text("目标效果器已移除，请重新拖放。"));return;}
+    auto key=target.isEmpty()?"append:"+juce::Uuid().toString():target;auto serial=++onlineSerial;onlineRequests[key]=serial;
+    auto active=[this,key,serial]{auto it=onlineRequests.find(key);return it!=onlineRequests.end() && it->second==serial;};
+    auto finish=[this,key,active,completion](bool ok,juce::String status){
+        if(!active()){if(completion)completion(false,ui::text("加载已被新的选择取代。"));return;}
+        onlineRequests.erase(key);setMessage(status);if(completion)completion(ok,std::move(status));
+    };
+    setMessage(ui::text("正在读取在线音色…"));
+    onlineSource.resolve(toneId,downloadCallbacks.wrap([this,target,modelId,key,active,finish](t3k::Result<t3k::ToneWithModels> result){
+        if(!active()){finish(false,{});return;}
+        if(!result.ok()){finish(false,ui::networkError(result.error.status,result.error.message));return;}
+        auto tone=result->tone;
+        if(tone.format!="nam" && tone.format!="ir"){finish(false,ui::text("该音色可浏览，但当前引擎仅支持 NAM 与 IR。"));return;}
+        auto type=tone.format=="ir"?juce::String("Cabinet IR"):juce::String("NAM");
+        auto chain=engine.chain();
+        if(target.isNotEmpty()){
+            auto at=std::find_if(chain.begin(),chain.end(),[&](const auto& s){return s.id==target;});
+            if(at==chain.end() || at->type!=type){finish(false,ui::text("请拖到对应的 NAM / 箱体 IR 卡片，或拖到链路空白处。"));return;}
+        }
+        std::optional<t3k::Model> model;
+        for(auto& m:result->models)if((modelId==0 || m.id==modelId) && ((tone.format=="nam" && m.extension()==".nam") || (tone.format=="ir" && m.extension()==".wav"))){model=m;break;}
+        if(!model){finish(false,ui::text("这个音色没有当前可加载的模型。"));return;}
+        setMessage(ui::text("正在下载并加载：")+tone.title);
+        onlineSource.download(*model,downloadCallbacks.wrap([this,tone,model=*model,type,target,key,active,finish](t3k::Result<juce::File> file){
+            if(!active()){finish(false,{});return;}
+            if(!file.ok()){finish(false,ui::networkError(file.error.status,file.error.message));return;}
+            auto* metadata=new juce::DynamicObject;metadata->setProperty("name",tone.title+" / "+model.name);metadata->setProperty("author",tone.user.creatorName());metadata->setProperty("license",tone.license);metadata->setProperty("sourceUrl",tone.url);metadata->setProperty("toneId",juce::String(tone.id));
+            metadata->setProperty("category",tone.format=="ir"?"Cabinet IR":tone.gear=="amp" || tone.gear=="amp-cab"?"Amplifier":tone.gear=="pedal"?"Pedal":"Unsorted");
+            juce::Array<juce::var> tags;for(auto& t:tone.tags)tags.add(t.name);for(auto& m:tone.makes)tags.add(m.name);metadata->setProperty("tags",tags);
+            imports.addJob([this,file=*file,provenance=juce::var(metadata),type,target,key,active,finish]{
+                std::optional<ModelEntry> entry;juce::String error;
+                try{entry=services->library.importFile(file,provenance);entry->name=provenance.getProperty("name",entry->name).toString();++libraryVersion;}catch(const std::exception& e){error=juce::String::fromUTF8(e.what());}
+                juce::MessageManager::callAsync(downloadCallbacks.wrap([this,entry=std::move(entry),error,type,target,key,active,finish]{
+                    if(!active()){finish(false,{});return;}
+                    if(!entry){finish(false,ui::text("模型校验失败：")+ui::message(error));return;}
+                    auto chain=engine.chain();auto id=target;
+                    if(target.isNotEmpty()){
+                        auto at=std::find_if(chain.begin(),chain.end(),[&](const auto& s){return s.id==target;});
+                        if(at==chain.end() || at->type!=type){finish(false,ui::text("目标效果器已移除，保留当前链路。"));return;}
+                        at->file=services->library.fileFor(*entry).getFullPathName();at->title=entry->name;
+                    }else{
+                        if(chain.size()>=16){finish(false,ui::text("Maximum 16 effects"));return;}
+                        StageSpec s;s.id=key.fromFirstOccurrenceOf("append:",false,false);id=s.id;s.type=type;s.file=services->library.fileFor(*entry).getFullPathName();s.title=entry->name;chain.push_back(std::move(s));
+                    }
+                    engine.setChain(std::move(chain));finish(true,ui::text("已加载在线音色：")+entry->name);if(onStageLoaded)onStageLoaded(id);
+                }));
+            });
+        }));
+    }));
 }
 void Processor::getStateInformation(juce::MemoryBlock& out) {
     auto* object=new juce::DynamicObject;object->setProperty("version",1);

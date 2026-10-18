@@ -56,6 +56,7 @@ public:
 inline void field(juce::TextEditor& e,const juce::String& placeholder) {
     e.setFont(font(14));e.setTextToShowWhenEmpty(text(placeholder),muted);e.setIndents(10,7);
 }
+inline void field(juce::TextEditor& e,const char* placeholder){field(e,juce::String::fromUTF8(placeholder));}
 inline void card(juce::Graphics& g,juce::Rectangle<int> bounds) {
     g.setColour(panel);g.fillRoundedRectangle(bounds.toFloat(),12);
     g.setColour(line.withAlpha(.6f));g.drawRoundedRectangle(bounds.toFloat().reduced(.5f),12,1);

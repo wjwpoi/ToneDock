@@ -1,4 +1,5 @@
 #include "Editor.h"
+#include "OnlineBrowser.h"
 
 namespace tonedock {
 namespace {
@@ -100,117 +101,11 @@ public:
 private:Editor& editor;std::vector<std::unique_ptr<Pedal>> pedals;
 };
 
-class Editor::ToneBrowser : public juce::Component,private juce::ListBoxModel {
-public:
-    explicit ToneBrowser(Processor& p,int toneId):processor(p),client(p.services->tone3000) {
-        for(auto* component:std::initializer_list<juce::Component*>{&key,&connect,&browse,&disconnect,&feed,&architecture,&refresh,&previous,&next,&list,&detail,&models,&download,&source,&state})addAndMakeVisible(component);
-        style(key,"TONE3000 publishable key: t3k_pub_...");key.setText(client.publishableKey());key.setReadOnly(client.publishableKey().isNotEmpty());
-        connect.onClick=[this]{startFlow(t3k::FlowRequest::Kind::selectTone,0);};
-        browse.onClick=[this]{startFlow(t3k::FlowRequest::Kind::selectTone,0);};
-        disconnect.onClick=[this]{if(flow)flow->cancel();client.clearTokens();state.setText(ui::text("Disconnected"),juce::dontSendNotification);};
-        for(auto name:juce::StringArray{"Latest","Trending","Favorites","Created","Downloaded"})feed.addItem(ui::text(name),feed.getNumItems()+1);
-        feed.setSelectedId(1);feed.onChange=[this]{page=1;loadFeed();};refresh.onClick=[this]{loadFeed();};
-        previous.onClick=[this]{if(page>1){--page;loadFeed();}};next.onClick=[this]{++page;loadFeed();};
-        architecture.addItem(ui::text("A2 models"),1);architecture.addItem(ui::text("A1 / Custom models"),2);architecture.setSelectedId(client.selectedArchitecture()==2?1:2);
-        architecture.onChange=[this]{++selectionGeneration;client.setArchitecture(architecture.getSelectedId()==1?2:0);models.clear();download.setEnabled(false);};
-        list.setModel(this);list.setRowHeight(42);list.setColour(juce::ListBox::backgroundColourId,background);
-        style(detail,"Select a tone to inspect its creator, license and captures");detail.setMultiLine(true);detail.setReadOnly(true);
-        models.onChange=[this]{download.setEnabled(models.getSelectedId()>0);};download.setEnabled(false);
-        download.onClick=[this]{downloadSelected();};source.onClick=[this]{if(current.tone.url.startsWith("https://"))juce::URL(current.tone.url).launchInDefaultBrowser();};
-        setSize(900,650);
-        if(toneId>0)startFlow(t3k::FlowRequest::Kind::loadTone,toneId);
-        else if(client.isConnected())loadFeed();
-        else state.setText(ui::text("Connect your account, then browse or open a tone link."),juce::dontSendNotification);
-    }
-    ~ToneBrowser() override{if(flow)flow->cancel();list.setModel(nullptr);}
-    void paint(juce::Graphics& g) override{g.fillAll(background);g.setColour(accent);g.setFont(ui::font(20));g.drawText(ui::text("Powered by TONE3000"),20,12,500,28,juce::Justification::centredLeft);}
-    void resized() override {
-        int w=getWidth();key.setBounds(20,52,w-370,30);connect.setBounds(w-340,52,95,30);browse.setBounds(w-235,52,100,30);disconnect.setBounds(w-125,52,105,30);
-        feed.setBounds(20,96,140,28);architecture.setBounds(170,96,180,28);refresh.setBounds(360,96,85,28);previous.setBounds(455,96,65,28);next.setBounds(530,96,65,28);
-        list.setBounds(20,140,350,getHeight()-204);detail.setBounds(390,140,w-410,getHeight()-300);
-        models.setBounds(390,getHeight()-145,w-410,30);download.setBounds(390,getHeight()-100,170,32);source.setBounds(575,getHeight()-100,180,32);
-        state.setBounds(20,getHeight()-48,w-40,35);
-    }
-private:
-    int getNumRows() override{return tones.size();}
-    void paintListBoxItem(int row,juce::Graphics& g,int w,int h,bool selected) override {
-        if(row<0 || row>=tones.size())return;g.setColour(selected?juce::Colour(0xff344734):panel);g.fillRect(0,1,w,h-2);
-        g.setColour(ink);g.setFont(ui::font(13));g.drawText(tones[row].title,8,3,w-16,20,juce::Justification::centredLeft);
-        g.setColour(muted);g.setFont(ui::font(11));g.drawText(tones[row].user.creatorName()+" / "+ui::text(tones[row].gear),8,23,w-16,16,juce::Justification::centredLeft);
-    }
-    void selectedRowsChanged(int row) override{if(row>=0 && row<tones.size())loadTone(tones[row].id);}
-    bool readyKey() {
-        if(client.publishableKey().isNotEmpty())return true;
-        if(processor.services->configureKey(key.getText())){key.setReadOnly(true);return true;}
-        state.setText(ui::text("Enter a publishable t3k_pub_ key from TONE3000 Settings > API Keys. No secret key is needed."),juce::dontSendNotification);return false;
-    }
-    void startFlow(t3k::FlowRequest::Kind kind,int id) {
-        if(!readyKey())return;
-        if(flow)flow->cancel();flow=t3k::makeAuthFlow(t3k::FlowMode::systemBrowser);
-        t3k::FlowRequest request;request.kind=kind;request.catalog.architecture=client.selectedArchitecture();request.catalog.preview=true;
-        if(id>0)request.toneId=juce::String(id);
-        state.setText(ui::text("Continue in your browser. You will return here after choosing a tone."),juce::dontSendNotification);
-        try{flow->start(request,scope.wrap([this](t3k::FlowResult result){
-            if(result.connected()) {
-                state.setText(ui::text("Connected"),juce::dontSendNotification);
-                if(result.toneId.containsOnly("0123456789") && result.toneId.getIntValue()>0)loadTone(result.toneId.getIntValue());else loadFeed();
-            }else state.setText(result.canceled()?ui::text("Canceled"):ui::message(result.error),juce::dontSendNotification);
-        }));}catch(const std::exception& e){state.setText(ui::message(e.what()),juce::dontSendNotification);}
-    }
-    void loadFeed() {
-        if(!client.isConnected()){state.setText(ui::text("Connect TONE3000 first"),juce::dontSendNotification);return;}
-        state.setText(ui::text("Loading page ")+juce::String(page)+"...",juce::dontSendNotification);
-        auto done=scope.wrap([this](t3k::Result<t3k::Page<t3k::Tone>> result){
-            if(!result.ok()){state.setText(ui::networkError(result.error.status,result.error.message),juce::dontSendNotification);return;}
-            tones=result->data;list.updateContent();previous.setEnabled(page>1);next.setEnabled(page<result->totalPages);
-            state.setText(ui::text("Page ")+juce::String(page)+" / "+juce::String(result->totalPages),juce::dontSendNotification);
-        });
-        t3k::ListLibraryParams params;params.page=page;params.pageSize=30;
-        if(feed.getSelectedId()==3)client.listFavoritedTones(params,done);
-        else if(feed.getSelectedId()==4)client.listCreatedTones(params,done);
-        else if(feed.getSelectedId()==5)client.listDownloadedTones(params,done);
-        else {
-            auto callback=scope.wrap([this](t3k::Result<juce::Array<t3k::Tone>> result){
-                if(!result.ok()){state.setText(ui::networkError(result.error.status,result.error.message),juce::dontSendNotification);return;}
-                tones=*result;list.updateContent();previous.setEnabled(false);next.setEnabled(false);state.setText(juce::String(tones.size())+ui::text(" tones"),juce::dontSendNotification);
-            });
-            if(feed.getSelectedId()==2)client.listTrendingTones({},callback);else client.listLatestTones(callback);
-        }
-    }
-    void loadTone(int id) {
-        auto ticket=++selectionGeneration;state.setText(ui::text("Loading tone and captures..."),juce::dontSendNotification);models.clear();download.setEnabled(false);
-        client.getToneWithModels(id,scope.wrap([this,ticket](t3k::Result<t3k::ToneWithModels> result){
-            if(ticket!=selectionGeneration)return;
-            if(!result.ok()){state.setText(ui::networkError(result.error.status,result.error.message),juce::dontSendNotification);return;}
-            current=*result;models.clear();for(auto& m:current.models)models.addItem(m.name,models.getNumItems()+1);
-            detail.setText(current.tone.title+"\n\n"+ui::text("By ")+current.tone.user.creatorName()+"\n"+current.tone.user.url+"\n\n"+current.tone.description
-                +"\n\n"+ui::text("Gear: ")+ui::text(current.tone.gear)+"\n"+ui::text("License: ")+t3k::licenseLabel(current.tone.license)+"\n\n"+current.tone.url);
-            if(models.getNumItems()>0)models.setSelectedId(1);
-            state.setText(ui::text(current.models.isEmpty()?"No supported captures for this architecture. Try A1 / Custom or A2.":"Choose a capture to download into your library."),juce::dontSendNotification);
-        }));
-    }
-    void downloadSelected() {
-        auto row=models.getSelectedId()-1;if(row<0 || row>=current.models.size())return;
-        auto tone=current.tone;auto model=current.models[row];download.setEnabled(false);state.setText(ui::text("Downloading ")+model.name+"...",juce::dontSendNotification);
-        auto* meta=new juce::DynamicObject;meta->setProperty("name",tone.title+" / "+model.name);meta->setProperty("author",tone.user.creatorName());
-            meta->setProperty("license",tone.license);meta->setProperty("sourceUrl",tone.url);meta->setProperty("toneId",juce::String(tone.id));
-            meta->setProperty("category",tone.gear=="amp" || tone.gear=="amp-cab"?"Amplifier":tone.gear=="pedal"?"Pedal":tone.format=="ir"?"Cabinet IR":"Unsorted");
-            juce::Array<juce::var> tags;for(auto& t:tone.tags)tags.add(t.name);for(auto& make:tone.makes)tags.add(make.name);meta->setProperty("tags",tags);
-        processor.downloadModel(model,juce::var(meta),scope.wrap([this](juce::String status){download.setEnabled(true);state.setText(ui::message(status),juce::dontSendNotification);}));
-    }
-    Processor& processor;t3k::Client& client;t3k::AsyncScope scope;
-    std::unique_ptr<t3k::AuthFlow> flow;
-    juce::TextEditor key,detail;juce::TextButton connect{ui::text("Connect")},browse{ui::text("Browse")},disconnect{ui::text("Disconnect")},refresh{ui::text("Refresh")},previous{ui::text("Prev")},next{ui::text("Next")},download{ui::text("Download to library")},source{ui::text("View on TONE3000")};
-    juce::ComboBox feed,architecture,models;juce::ListBox list;juce::Label state;
-    juce::Array<t3k::Tone> tones;t3k::ToneWithModels current;int page=1,selectionGeneration=0;
-};
-
-
 Editor::Editor(Processor& p):AudioProcessorEditor(p),processor(p) {
     setLookAndFeel(&theme);
-    for(auto* c:std::initializer_list<juce::Component*>{&libraryList,&chainViewport,&search,&categoryEdit,&tagsEdit,&link,&categoryFilter,&effectChoice,&importButton,&cloudButton,&loadButton,&favoriteButton,&metadataButton,&removeModelButton,&addButton,&deleteButton,&upButton,&downButton,&bypassStageButton,&audioButton,&saveButton,&openButton,&linkButton,&inputGain,&outputGain,&bypass,&workButton,&duplicateButton})addAndMakeVisible(c);
+    for(auto* c:std::initializer_list<juce::Component*>{&libraryList,&chainViewport,&search,&categoryEdit,&tagsEdit,&link,&categoryFilter,&effectChoice,&importButton,&cloudButton,&loadButton,&favoriteButton,&metadataButton,&removeModelButton,&addButton,&deleteButton,&upButton,&downButton,&bypassStageButton,&audioButton,&saveButton,&openButton,&linkButton,&inputGain,&outputGain,&bypass,&workButton,&onlineButton,&duplicateButton})addAndMakeVisible(c);
     libraryList.setComponentID("library-list");search.setComponentID("library-search");categoryEdit.setComponentID("library-category");categoryFilter.setComponentID("library-filter");effectChoice.setComponentID("effect-choice");
-    addButton.setComponentID("add-effect");deleteButton.setComponentID("delete-effect");duplicateButton.setComponentID("duplicate-effect");upButton.setComponentID("move-left");downButton.setComponentID("move-right");bypassStageButton.setComponentID("bypass-effect");audioButton.setComponentID("audio-page");workButton.setComponentID("work-page");chainViewport.setComponentID("chain-viewport");
+    addButton.setComponentID("add-effect");deleteButton.setComponentID("delete-effect");duplicateButton.setComponentID("duplicate-effect");upButton.setComponentID("move-left");downButton.setComponentID("move-right");bypassStageButton.setComponentID("bypass-effect");audioButton.setComponentID("audio-page");onlineButton.setComponentID("online-page");workButton.setComponentID("work-page");chainViewport.setComponentID("chain-viewport");
     workButton.setClickingTogglesState(false);audioButton.setButtonText(ui::text("设备"));workButton.setToggleState(true,juce::dontSendNotification);
     upButton.setButtonText(ui::text("← 前移"));downButton.setButtonText(ui::text("后移 →"));deleteButton.setButtonText(ui::text("删除"));bypassStageButton.setButtonText(ui::text("旁通 / 启用"));
     modelRows=std::make_unique<ModelRows>(*this);libraryList.setModel(modelRows.get());libraryList.setRowHeight(61);
@@ -238,7 +133,7 @@ Editor::Editor(Processor& p):AudioProcessorEditor(p),processor(p) {
         editChain([this](auto& chain){std::erase_if(chain,[this](const auto& s){return s.id==selectedStageId;});});if(!visibleChain.empty())selectStage(juce::jmin(index,int(visibleChain.size())-1));};
     upButton.onClick=[this]{moveStage(-1);};downButton.onClick=[this]{moveStage(1);};duplicateButton.onClick=[this]{duplicateStage();};
     bypassStageButton.onClick=[this]{for(auto& s:visibleChain)if(s.id==selectedStageId)s.controls->enabled.store(!s.controls->enabled.load());repaint();};
-    audioButton.onClick=[this]{showDevicePage(true);};workButton.onClick=[this]{showDevicePage(false);};
+    audioButton.onClick=[this]{showDevicePage(true);};workButton.onClick=[this]{showOnlineLibrary(false);};onlineButton.onClick=[this]{showOnlineLibrary(true);};
     saveButton.onClick=[this]{preset(true);};openButton.onClick=[this]{preset(false);};
     for(auto* slider:{&inputGain,&outputGain}){slider->setSliderStyle(juce::Slider::LinearHorizontal);slider->setTextBoxStyle(juce::Slider::TextBoxRight,false,70,24);slider->setTextValueSuffix(" dB");}
     inputAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.parameters,"input",inputGain);
@@ -246,10 +141,10 @@ Editor::Editor(Processor& p):AudioProcessorEditor(p),processor(p) {
     bypassAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.parameters,"bypass",bypass);
     for(int i=0;i<4;++i){auto& k=knobs[size_t(i)];addAndMakeVisible(k);addAndMakeVisible(knobLabels[size_t(i)]);k.setComponentID("stage-knob-"+juce::String(i));k.setRange(0,1,.001);k.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);k.setTextBoxStyle(juce::Slider::TextBoxBelow,false,110,24);
         knobLabels[size_t(i)].setFont(ui::font(14));knobLabels[size_t(i)].setJustificationType(juce::Justification::centred);k.onValueChange=[this,i]{for(auto& s:visibleChain)if(s.id==selectedStageId)s.controls->values[size_t(i)].store(float(knobs[size_t(i)].getValue()));};}
-    processor.onOpenTone=[this](int id){openTone(id);};setResizable(true,true);setResizeLimits(1120,780,1920,1200);setSize(1360,880);
+    processor.onOpenTone=[this](int id){openTone(id);};processor.onStageLoaded=[this](const juce::String& id){syncChain();for(size_t i=0;i<visibleChain.size();++i)if(visibleChain[i].id==id){selectStage(int(i));break;}};setResizable(true,true);setResizeLimits(1120,780,1920,1200);setSize(1360,880);
     refreshLibrary();syncChain();if(!visibleChain.empty())selectStage(juce::jmin(1,int(visibleChain.size())-1));startTimerHz(15);
 }
-Editor::~Editor(){processor.onOpenTone=nullptr;stopTimer();devicePage.reset();browser.reset();chainViewport.setViewedComponent(nullptr,false);board.reset();libraryList.setModel(nullptr);setLookAndFeel(nullptr);}
+Editor::~Editor(){processor.onStageLoaded=nullptr;processor.onOpenTone=nullptr;stopTimer();devicePage.reset();browser.reset();chainViewport.setViewedComponent(nullptr,false);board.reset();libraryList.setModel(nullptr);setLookAndFeel(nullptr);}
 void Editor::showDevicePage(bool show) {
     if(show && !devicePage){
         if(processor.createAudioSettings)devicePage=processor.createAudioSettings();
@@ -257,26 +152,28 @@ void Editor::showDevicePage(bool show) {
         addAndMakeVisible(*devicePage);devicePage->setComponentID("device-content");
     }
     devicePageVisible=show;
-    for(int i=0;i<getNumChildComponents();++i){auto* c=getChildComponent(i);if(c==&workButton || c==&audioButton || c==&cloudButton || c==&saveButton || c==&openButton || c==devicePage.get())continue;c->setVisible(!show);}
+    for(int i=0;i<getNumChildComponents();++i){auto* c=getChildComponent(i);if(c==&workButton || c==&onlineButton || c==&audioButton || c==&cloudButton || c==&saveButton || c==&openButton || c==devicePage.get() || c==browser.get())continue;c->setVisible(!show);}
     if(devicePage)devicePage->setVisible(show);
-    workButton.setToggleState(!show,juce::dontSendNotification);audioButton.setToggleState(show,juce::dontSendNotification);
+    workButton.setToggleState(!show && !onlineVisible,juce::dontSendNotification);onlineButton.setToggleState(!show && onlineVisible,juce::dontSendNotification);audioButton.setToggleState(show,juce::dontSendNotification);
     if(!show)for(size_t i=0;i<visibleChain.size();++i)if(visibleChain[i].id==selectedStageId)selectStage(int(i));
-    emptyLibrary.setVisible(!show && filtered.empty());
+    for(auto* c:std::initializer_list<juce::Component*>{&libraryList,&search,&categoryEdit,&tagsEdit,&link,&categoryFilter,&importButton,&loadButton,&favoriteButton,&metadataButton,&removeModelButton,&linkButton})c->setVisible(!show && !onlineVisible);
+    if(browser)browser->setVisible(!show && onlineVisible);
+    emptyLibrary.setVisible(!show && !onlineVisible && filtered.empty());
     resized();repaint();
 }
 void Editor::paint(juce::Graphics& g) {
-    int w=getWidth(),h=getHeight(),x=336,rw=w-360;
+    int w=getWidth(),h=getHeight(),x=workspaceX(),rw=w-x-24;
     g.fillAll(background);g.setColour(panel);g.fillRect(0,0,w,80);
     g.setColour(accent);g.setFont(ui::font(29));g.drawText("ToneDock",24,14,220,36,juce::Justification::centredLeft);
     g.setColour(muted);g.setFont(ui::font(12));g.drawText(ui::text("你的音色，你的声音。"),26,51,230,20,juce::Justification::centredLeft);
     g.setColour(ui::line);g.drawHorizontalLine(80,0,float(w));
     if(!devicePageVisible){
-        ui::card(g,{16,98,298,h-140});ui::card(g,{x,444,rw,h-594});ui::card(g,{x,h-134,rw,82});
-        g.setColour(ink);g.setFont(ui::font(19));g.drawText(ui::text("模型库"),30,110,150,28,juce::Justification::centredLeft);
+        if(!onlineVisible)ui::card(g,{16,98,298,h-140});ui::card(g,{x,444,rw,h-594});ui::card(g,{x,h-134,rw,82});
+        g.setColour(ink);g.setFont(ui::font(19));if(!onlineVisible)g.drawText(ui::text("模型库"),30,110,150,28,juce::Justification::centredLeft);
         g.drawText(ui::text("效果链"),x,105,150,30,juce::Justification::centredLeft);
         g.setColour(muted);g.setFont(ui::font(13));g.drawText(juce::String(visibleChain.size())+ui::text(" / 16  ·  ")+ui::text("拖动排序，点击编辑参数"),x,140,400,24,juce::Justification::centredLeft);
         for(auto& s:visibleChain)if(s.id==selectedStageId){
-            g.setColour(ink);g.setFont(ui::font(18));g.drawText(ui::text(s.type),x+20,457,190,30,juce::Justification::centredLeft);
+            g.setColour(ink);g.setFont(ui::font(18));g.drawText(ui::text(s.type),x+20,457,juce::jmax(80,rw-520),30,juce::Justification::centredLeft);
             if(s.type=="NAM" || s.type=="Cabinet IR"){
                 g.setColour(muted);g.setFont(ui::font(14));auto text=s.file.isEmpty()?ui::text("在左侧选择模型，点击「加载模型」\n模型会载入当前选中的效果器。"):s.title;
                 if(s.type=="NAM")text+="\n\n"+ui::text("包含箱体的模型通常无需再加箱体 IR。");
@@ -292,9 +189,10 @@ void Editor::paint(juce::Graphics& g) {
     g.drawText(juce::String(processor.engine.latency())+ui::text(" samples DSP latency"),w-260,h-37,236,27,juce::Justification::centredRight);
 }
 void Editor::resized() {
-    int w=getWidth(),h=getHeight(),x=336,rw=w-360;
-    workButton.setBounds(336,24,100,34);audioButton.setBounds(446,24,90,34);openButton.setBounds(w-378,24,110,34);saveButton.setBounds(w-258,24,110,34);cloudButton.setBounds(w-138,24,114,34);
+    int w=getWidth(),h=getHeight(),x=workspaceX(),rw=w-x-24;
+    workButton.setBounds(336,24,100,34);onlineButton.setBounds(446,24,104,34);audioButton.setBounds(560,24,80,34);openButton.setBounds(w-378,24,110,34);saveButton.setBounds(w-258,24,110,34);cloudButton.setBounds(w-138,24,114,34);
     if(devicePage)devicePage->setBounds(24,98,w-48,h-148);
+    if(browser)browser->setBounds(16,98,x-40,h-140);
     search.setBounds(30,151,270,34);categoryFilter.setBounds(30,195,270,32);libraryList.setBounds(26,239,278,h-548);
     emptyLibrary.setBounds(libraryList.getBounds().reduced(12));
     loadButton.setBounds(30,h-300,166,32);favoriteButton.setBounds(204,h-300,96,32);categoryEdit.setBounds(30,h-258,270,32);tagsEdit.setBounds(30,h-218,270,32);
@@ -340,7 +238,7 @@ void Editor::refreshLibrary() {
             filtered.push_back(m);
         }
         std::sort(filtered.begin(),filtered.end(),[](const auto& a,const auto& b){return a.name.compareIgnoreCase(b.name)<0;});
-        libraryList.updateContent();emptyLibrary.setVisible(filtered.empty() && !devicePageVisible);
+        libraryList.updateContent();emptyLibrary.setVisible(filtered.empty() && !devicePageVisible && !onlineVisible);
         auto selected=std::find_if(filtered.begin(),filtered.end(),[&](const auto& m){return m.id==selectedId;});
         if(selected!=filtered.end()){auto row=int(std::distance(filtered.begin(),selected));libraryList.selectRow(row);selectModel(row);}
         else{libraryList.deselectAllRows();categoryEdit.clear();tagsEdit.clear();favoriteButton.setButtonText(ui::text("Favorite"));}
@@ -362,9 +260,14 @@ void Editor::selectStage(int row) {
     upButton.setEnabled(row>0);downButton.setEnabled(row+1<int(visibleChain.size()));repaint();board->repaint();
 }
 void Editor::editChain(const std::function<void(std::vector<StageSpec>&)>& fn){auto chain=processor.engine.chain();fn(chain);processor.engine.setChain(std::move(chain));syncChain();}
-bool Editor::isInterestedInDragSource(const SourceDetails& details){return details.description.toString().startsWith("stage:");}
+bool Editor::isInterestedInDragSource(const SourceDetails& details){return details.description.toString().startsWith("stage:") || details.description.toString().startsWith("t3k-tone:");}
 void Editor::itemDragMove(const SourceDetails& d){if(chainViewport.getBounds().contains(d.localPosition))chainViewport.autoScroll(d.localPosition.x-chainViewport.getX(),d.localPosition.y-chainViewport.getY(),32,18);}
 void Editor::itemDropped(const SourceDetails& d) {
+    auto description=d.description.toString();
+    if(description.startsWith("t3k-tone:")){
+        if(devicePageVisible || d.localPosition.x<workspaceX())return;
+        auto parts=juce::StringArray::fromTokens(description,":","");if(parts.size()==3 && parts[1].containsOnly("0123456789") && parts[2].containsOnly("0123456789"))loadOnlineAt(parts[1].getIntValue(),parts[2].getIntValue(),d.localPosition);return;
+    }
     if(!chainViewport.getBounds().contains(d.localPosition) || devicePageVisible)return;
     auto id=d.description.toString().fromFirstOccurrenceOf("stage:",false,false);
     auto x=d.localPosition.x-chainViewport.getX()+chainViewport.getViewPositionX();int target=juce::jmax(0,(x+88)/200);
@@ -382,10 +285,21 @@ void Editor::preset(bool save) {
             if(save){processor.getStateInformation(data);if(!file.withFileExtension("tonedock").replaceWithData(data.getData(),data.getSize()))processor.setMessage("Cannot save preset");}
             else if(file.getSize()<=1024*1024 && file.loadFileAsData(data))processor.setStateInformation(data.getData(),int(data.getSize()));}));
 }
-void Editor::openTone(int id) {
-    juce::DialogWindow::LaunchOptions options;options.dialogTitle="ToneDock / TONE3000";options.dialogBackgroundColour=background;
-    options.content.setOwned(new ToneBrowser(processor,id));options.componentToCentreAround=this;options.useNativeTitleBar=true;options.resizable=true;
-    browser.reset(options.create());browser->setLookAndFeel(&theme);browser->setVisible(true);
+void Editor::showOnlineLibrary(bool show){
+    if(show && !browser){browser=std::make_unique<OnlineBrowser>(processor);addAndMakeVisible(*browser);}
+    onlineVisible=show;showDevicePage(false);
+}
+void Editor::openTone(int id){showOnlineLibrary(true);if(id>0)browser->openTone(id,true);}
+void Editor::textDropped(const juce::String& text,int x,int y){if(auto id=parseToneLink(text))loadOnlineAt(*id,0,{x,y});}
+void Editor::loadOnlineAt(int id,int modelId,juce::Point<int> position){
+    if(devicePageVisible)return;juce::String target;
+    for(size_t i=0;i<overview.size();++i)if(overview[i]->getBounds().contains(position)){target=visibleChain[i].id;break;}
+    if(chainViewport.getBounds().contains(position)){
+        auto point=position-chainViewport.getPosition()+chainViewport.getViewPosition();
+        for(size_t i=0;i<visibleChain.size();++i)if(juce::Rectangle<int>(12+int(i)*200,6,176,190).contains(point)){target=visibleChain[i].id;break;}
+    }
+    if(!processor.services->tone3000.isConnected()){showOnlineLibrary(true);browser->openTone(id,true,target);return;}
+    processor.loadOnlineTone(id,target,modelId);
 }
 void Editor::timerCallback() {
     if(version!=processor.libraryVersion.load())refreshLibrary();
