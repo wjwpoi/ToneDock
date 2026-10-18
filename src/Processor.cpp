@@ -122,10 +122,10 @@ void Processor::loadOnlineTone(int toneId,const juce::String& target,int modelId
     if(toneId<=0){failEarly(ui::text("无效的音色编号"));return;}
     if(target.isEmpty() && initial.size()>=16){failEarly(ui::text("Maximum 16 effects"));return;}
     if(target.isNotEmpty() && std::none_of(initial.begin(),initial.end(),[&](const auto& s){return s.id==target;})){failEarly(ui::text("目标效果器已移除，请重新拖放。"));return;}
-    auto key=target.isEmpty()?"append:"+juce::Uuid().toString():target;auto serial=++onlineSerial;onlineRequests[key]=serial;
-    auto active=[this,key,serial]{auto it=onlineRequests.find(key);return it!=onlineRequests.end() && it->second==serial;};
-    auto finish=[this,key,active,completion](bool ok,juce::String status){
-        if(!active()){if(completion)completion(false,ui::text("加载已被新的选择取代。"));return;}
+    auto key=target.isEmpty()?"append:"+juce::Uuid().toString():target;auto serial=++onlineSerial;auto epoch=onlineEpoch.load();onlineRequests[key]=serial;
+    auto active=[this,key,serial,epoch]{if(onlineEpoch.load()!=epoch)return false;auto it=onlineRequests.find(key);return it!=onlineRequests.end() && it->second==serial;};
+    auto finish=[this,key,serial,active,completion](bool ok,juce::String status){
+        if(!active()){auto it=onlineRequests.find(key);if(it!=onlineRequests.end() && it->second==serial)onlineRequests.erase(it);if(completion)completion(false,ui::text("加载已被新的选择取代。"));return;}
         onlineRequests.erase(key);setMessage(status);if(completion)completion(ok,std::move(status));
     };
     setMessage(ui::text("正在读取在线音色…"));
@@ -186,7 +186,9 @@ void Processor::setStateInformation(const void* data,int size) {
         for(auto& v:*chain.getArray()){auto s=StageSpec::fromVar(v);if(!effectTypes.contains(s.type))throw std::runtime_error("Unknown effect in preset");specs.push_back(std::move(s));}
         auto xml=juce::parseXML(value.getProperty("parameters","").toString());
         if(!xml)throw std::runtime_error("Missing preset parameters");
-        onlineRequests.clear();parameters.replaceState(juce::ValueTree::fromXml(*xml));engine.setChain(std::move(specs));setMessage("Preset restored");
+        // Hosts may restore state off the message thread; only invalidate the
+        // epoch here. The message-thread completion owns request-map cleanup.
+        ++onlineEpoch;parameters.replaceState(juce::ValueTree::fromXml(*xml));engine.setChain(std::move(specs));setMessage("Preset restored");
     }catch(const std::exception& e){setMessage(e.what());}
 }
 juce::AudioProcessorEditor* Processor::createEditor(){return new Editor(*this);}

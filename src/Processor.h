@@ -68,6 +68,7 @@ private:
     juce::String notification;
     juce::ThreadPool imports{1};
     juce::uint64 onlineSerial=0;
+    std::atomic<juce::uint64> onlineEpoch{0};
     std::map<juce::String,juce::uint64> onlineRequests;
     t3k::AsyncScope downloadCallbacks;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Processor)
