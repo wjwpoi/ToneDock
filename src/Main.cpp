@@ -56,20 +56,26 @@ private:
         probeStarted=juce::Time::getMillisecondCounterHiRes();probeReport=new juce::DynamicObject;
         probeReport->setProperty("version",JUCE_APPLICATION_VERSION_STRING);probeReport->setProperty("connected",processor->services->tone3000.isConnected());
         if(!processor->services->tone3000.isConnected()){finishCatalogCheck(false,"Account not connected");return;}
-        for(auto& token:juce::StringArray::fromTokens(commandLine,true))if(token.startsWith("--catalog-check-tone="))probeTone=token.fromFirstOccurrenceOf("=",false,false).getIntValue();
+        juce::String format="nam";for(auto& token:juce::StringArray::fromTokens(commandLine,true)){
+            if(token.startsWith("--catalog-check-tone="))probeTone=token.fromFirstOccurrenceOf("=",false,false).getIntValue();
+            if(token=="--catalog-check-format=ir")format="ir";
+            if(token=="--catalog-check-pages=2")probeTargetBatches=2;
+        }
+        probeReport->setProperty("format",format);
         probe=std::make_unique<Catalog>(Catalog::forClient(processor->services->tone3000));
         probe->changed=[this]{
-            if(probe->isLoading() || probeLoading)return;probeLoading=true;
-            auto error=probe->error();probeReport->setProperty("searchHttpError",error.status);probeReport->setProperty("tonesOnFirstBatch",probe->tones().size());probeReport->setProperty("hasMore",probe->hasMore());
+            if(probe->isLoading() || probeLoading)return;
+            auto error=probe->error();probeReport->setProperty("searchHttpError",error.status);probeReport->setProperty("tonesRead",probe->tones().size());if(probeBatches==0)probeReport->setProperty("firstBatchCount",probe->tones().size());probeReport->setProperty("hasMore",probe->hasMore());
             if(error.status || error.message.isNotEmpty()){finishCatalogCheck(false,catalogErrorForReport(error));return;}
             if(probe->tones().isEmpty()){finishCatalogCheck(false,"Catalog search returned no tones");return;}
+            ++probeBatches;probeReport->setProperty("batchesRead",probeBatches);if(probeBatches<probeTargetBatches && probe->hasMore()){probe->more();return;}probeLoading=true;
             int id=probeTone>0?probeTone:probe->tones()[0].id;probeReport->setProperty("loadedToneId",id);
             processor->loadOnlineTone(id,{},0,[this](bool ok,juce::String status){
                 probeReport->setProperty("loadSucceeded",ok);if(!ok){finishCatalogCheck(false,status);return;}
                 probeWaitingForEngine=true;
             });
         };
-        CatalogQuery query;query.filters.query="Fender";query.filters.format="nam";query.filters.sort="best-match";probe->search(std::move(query));startTimer(100);
+        CatalogQuery query;query.filters.query=format=="nam"?"Fender":"";query.filters.format=format;query.filters.sort=format=="nam"?"best-match":"trending";probe->search(std::move(query));startTimer(100);
     }
     static juce::String catalogErrorForReport(const t3k::Error& e){return ui::networkError(e.status,e.message);}
     void finishCatalogCheck(bool ok,const juce::String& message){
@@ -108,7 +114,7 @@ private:
     juce::AudioDeviceManager devices;juce::AudioProcessorPlayer player;
     std::unique_ptr<Processor> processor;std::unique_ptr<Window> window;
     juce::String pending;juce::File screenshot;
-    bool probeMode=false,probeLoading=false,probeWaitingForEngine=false;int probeTone=0;double probeStarted=0;
+    bool probeMode=false,probeLoading=false,probeWaitingForEngine=false;int probeTone=0,probeBatches=0,probeTargetBatches=1;double probeStarted=0;
     juce::File probeOutput;juce::DynamicObject::Ptr probeReport;std::unique_ptr<Catalog> probe;
 };
 }

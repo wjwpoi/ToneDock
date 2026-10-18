@@ -175,7 +175,7 @@ void Editor::paint(juce::Graphics& g) {
         for(auto& s:visibleChain)if(s.id==selectedStageId){
             g.setColour(ink);g.setFont(ui::font(18));g.drawText(ui::text(s.type),x+20,457,juce::jmax(80,rw-520),30,juce::Justification::centredLeft);
             if(s.type=="NAM" || s.type=="Cabinet IR"){
-                g.setColour(muted);g.setFont(ui::font(14));auto text=s.file.isEmpty()?ui::text("在左侧选择模型，点击「加载模型」\n模型会载入当前选中的效果器。"):s.title;
+                g.setColour(muted);g.setFont(ui::font(14));auto text=s.file.isEmpty()?(onlineVisible?ui::text("从左侧拖入在线音色，\n或双击音色替换此位置。"):ui::text("在左侧选择模型，点击「加载模型」\n模型会载入当前选中的效果器。")):s.title;
                 if(s.type=="NAM")text+="\n\n"+ui::text("包含箱体的模型通常无需再加箱体 IR。");
                 else text+="\n\n"+ui::text("WAV 脉冲响应 · 放在音箱模型之后。");
                 g.drawFittedText(text,x+200,510,rw-230,juce::jmax(60,h-690),juce::Justification::topLeft,6);
@@ -286,7 +286,10 @@ void Editor::preset(bool save) {
             else if(file.getSize()<=1024*1024 && file.loadFileAsData(data))processor.setStateInformation(data.getData(),int(data.getSize()));}));
 }
 void Editor::showOnlineLibrary(bool show){
-    if(show && !browser){browser=std::make_unique<OnlineBrowser>(processor);addAndMakeVisible(*browser);}
+    if(show && !browser){browser=std::make_unique<OnlineBrowser>(processor,[this](const juce::String& format){
+        auto type=format=="ir"?juce::String("Cabinet IR"):juce::String("NAM");auto chain=processor.engine.chain();
+        for(auto& s:chain)if(s.id==selectedStageId && s.type==type)return s.id;for(auto& s:chain)if(s.type==type)return s.id;return juce::String();
+    });addAndMakeVisible(*browser);}
     onlineVisible=show;showDevicePage(false);
 }
 void Editor::openTone(int id){showOnlineLibrary(true);if(id>0)browser->openTone(id,true);}

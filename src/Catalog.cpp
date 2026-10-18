@@ -20,6 +20,7 @@ Catalog::Backend Catalog::forClient(t3k::Client& client) {
     };
 }
 bool Catalog::hasMore() const{return !exhausted[0] || !exhausted[1];}
+void Catalog::clear(){++generation;++selectionGeneration;results.clear();seen.clear();selected={};toneId=0;loading=false;detailLoading=false;pending=0;exhausted={true,true};batch={};lastError={};lastDetailError={};notify();}
 void Catalog::search(CatalogQuery q) {
     query=std::move(q);++generation;++selectionGeneration;toneId=0;selected={};detailLoading=false;
     results.clear();seen.clear();nextPage={1,1};exhausted={false,true};lastError={};lastDetailError={};loading=false;

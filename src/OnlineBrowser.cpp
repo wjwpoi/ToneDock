@@ -8,7 +8,7 @@ juce::String catalogError(const t3k::Error& error){
 }
 juce::StringArray values(const juce::String& text){auto a=juce::StringArray::fromTokens(text,",","");a.trim();a.removeEmptyStrings();return a;}
 }
-OnlineBrowser::OnlineBrowser(Processor& p):processor(p),client(p.services->tone3000),catalog(Catalog::forClient(client)) {
+OnlineBrowser::OnlineBrowser(Processor& p,std::function<juce::String(const juce::String&)> targetForFormat):processor(p),client(p.services->tone3000),catalog(Catalog::forClient(client)),chooseTarget(std::move(targetForFormat)) {
     for(auto* c:std::initializer_list<juce::Component*>{&query,&key,&tags,&makes,&creators,&detail,&source,&gear,&format,&architecture,&sort,&captures,&searchButton,&more,&add,&viewSource,&account,&filters,&connect,&disconnect,&official,&verified,&list,&count,&state,&empty})addAndMakeVisible(c);
     setComponentID("online-browser");query.setComponentID("catalog-query");list.setComponentID("catalog-results");add.setComponentID("catalog-load");more.setComponentID("catalog-more");
     ui::field(query,"搜索名称，或粘贴 TONE3000 链接");ui::field(key,"t3k_pub_... 公开 Key");key.setText(client.publishableKey());key.setReadOnly(client.publishableKey().isNotEmpty());
@@ -25,9 +25,9 @@ OnlineBrowser::OnlineBrowser(Processor& p):processor(p),client(p.services->tone3
     query.onReturnKey=[this]{searchCatalog();};searchButton.onClick=[this]{searchCatalog();};more.onClick=[this]{catalog.more();};
     for(auto* c:{&source,&gear,&format,&architecture,&sort})c->onChange=[this]{if(!updating)searchCatalog();};
     verified.onClick=[this]{searchCatalog();};for(auto* e:{&tags,&makes,&creators})e->onReturnKey=[this]{searchCatalog();};
-    account.onClick=[this]{accountExpanded=!accountExpanded;resized();};filters.onClick=[this]{filtersExpanded=!filtersExpanded;resized();};
+    account.onClick=[this]{accountExpanded=!accountExpanded;if(accountExpanded)filtersExpanded=false;resized();};filters.onClick=[this]{filtersExpanded=!filtersExpanded;if(filtersExpanded)accountExpanded=false;resized();};
     connect.onClick=[this]{authenticate(t3k::FlowRequest::Kind::login);};official.onClick=[this]{authenticate(t3k::FlowRequest::Kind::selectTone);};
-    disconnect.onClick=[this]{if(flow)flow->cancel();client.clearTokens();++loadGeneration;accountExpanded=true;state.setText(ui::text("Disconnected"),juce::dontSendNotification);update();resized();};
+    disconnect.onClick=[this]{if(flow)flow->cancel();client.clearTokens();++loadGeneration;accountExpanded=true;catalog.clear();state.setText(ui::text("Disconnected"),juce::dontSendNotification);resized();};
     add.onClick=[this]{auto id=catalog.selectedId();if(id>0)load(id,captures.getSelectedId());};
     viewSource.onClick=[this]{auto url=catalog.detail().tone.url;if(url.startsWith("https://"))juce::URL(url).launchInDefaultBrowser();};
     catalog.changed=[this]{update();};accountExpanded=!client.isConnected();
@@ -89,7 +89,7 @@ void OnlineBrowser::update(){
     juce::ScopedValueSetter<bool> guard(updating,true);auto selectedId=catalog.selectedId();list.updateContent();
     for(int i=0;i<catalog.tones().size();++i)if(catalog.tones().getReference(i).id==selectedId){list.selectRow(i,true,true);break;}
     bool connected=client.isConnected();searchButton.setEnabled(connected && !catalog.isLoading());more.setEnabled(connected && catalog.hasMore() && !catalog.isLoading());
-    bool full=source.getSelectedId()==1;bool canSearch=connected && !catalog.isLoading();source.setEnabled(canSearch);gear.setEnabled(canSearch);for(auto* c:std::initializer_list<juce::Component*>{&format,&architecture,&sort,&tags,&makes,&creators,&verified})c->setEnabled(full && canSearch);
+    bool full=source.getSelectedId()==1;bool canSearch=connected && !catalog.isLoading();filters.setEnabled(connected);source.setEnabled(canSearch);gear.setEnabled(canSearch);for(auto* c:std::initializer_list<juce::Component*>{&format,&architecture,&sort,&tags,&makes,&creators,&verified})c->setEnabled(full && canSearch);
     count.setText(ui::text("已显示 ")+juce::String(catalog.tones().size())+ui::text(" 个音色"),juce::dontSendNotification);
     auto& data=catalog.detail();bool ready=data.tone.id>0 && !catalog.isDetailLoading();
     if(data.tone.id!=detailId){detailId=data.tone.id;captures.clear(juce::dontSendNotification);
@@ -100,13 +100,13 @@ void OnlineBrowser::update(){
             if(captures.getNumItems()>0)captures.setSelectedId(captures.getItemId(0),juce::dontSendNotification);
         }else detail.clear();
     }
-    bool playable=ready && (data.tone.format=="nam" || data.tone.format=="ir") && captures.getSelectedId()>0;add.setEnabled(playable);viewSource.setEnabled(ready);captures.setEnabled(playable);
+    bool playable=connected && ready && (data.tone.format=="nam" || data.tone.format=="ir") && captures.getSelectedId()>0;add.setEnabled(playable);viewSource.setEnabled(ready);captures.setEnabled(playable);
     if(catalog.error().status || catalog.error().message.isNotEmpty())state.setText(catalogError(catalog.error()),juce::dontSendNotification);
     else if(catalog.detailError().status || catalog.detailError().message.isNotEmpty())state.setText(catalogError(catalog.detailError()),juce::dontSendNotification);
     else if(catalog.isLoading())state.setText(ui::text("正在读取目录…"),juce::dontSendNotification);
     else if(catalog.isDetailLoading())state.setText(ui::text("正在获取全部捕获…"),juce::dontSendNotification);
     else if(ready && !playable)state.setText(ui::text("该格式可浏览；当前支持直接加载 NAM / IR。"),juce::dontSendNotification);
-    else state.setText(ui::text("双击音色或拖到右侧效果链，即可直接使用。"),juce::dontSendNotification);
+    else state.setText(ui::text("双击替换同类位置；拖到空白处或按按钮新增。"),juce::dontSendNotification);
     empty.setVisible(catalog.tones().isEmpty());
     empty.setText(ui::text(!connected?"登录后浏览完整在线目录。\n已有账号设置会自动保留。":catalog.isLoading()?"正在读取 TONE3000…":started?"没有结果。可调整筛选条件或稍后重试。":"搜索音色，或从完整目录开始浏览。"),juce::dontSendNotification);
     repaint();
@@ -118,10 +118,10 @@ void OnlineBrowser::paintListBoxItem(int row,juce::Graphics& g,int w,int h,bool 
     g.setColour(ui::muted);g.setFont(ui::font(12));g.drawText(t.format.toUpperCase()+" / "+ui::text(t.gear)+" / "+t.user.creatorName(),12,35,w-24,20,juce::Justification::centredLeft);
 }
 void OnlineBrowser::selectedRowsChanged(int row){if(!updating && row>=0 && row<getNumRows())catalog.select(catalog.tones().getReference(row).id);}
-void OnlineBrowser::listBoxItemDoubleClicked(int row,const juce::MouseEvent&){if(row>=0 && row<getNumRows())load(catalog.tones().getReference(row).id);}
+void OnlineBrowser::listBoxItemDoubleClicked(int row,const juce::MouseEvent&){if(row>=0 && row<getNumRows()){auto& t=catalog.tones().getReference(row);load(t.id,t.id==catalog.detail().tone.id?captures.getSelectedId():0,chooseTarget?chooseTarget(t.format):juce::String());}}
 juce::var OnlineBrowser::getDragSourceDescription(const juce::SparseSet<int>& rows){if(rows.isEmpty())return {};auto row=rows[0];if(row<0 || row>=getNumRows())return {};auto id=catalog.tones().getReference(row).id;auto model=id==catalog.detail().tone.id?captures.getSelectedId():0;return "t3k-tone:"+juce::String(id)+":"+juce::String(model);}
-void OnlineBrowser::load(int id,int model){
+void OnlineBrowser::load(int id,int model,juce::String target){
     auto ticket=++loadGeneration;state.setText(ui::text("正在下载、校验并加入链路…"),juce::dontSendNotification);
-    processor.loadOnlineTone(id,{},model,callbacks.wrap([this,ticket](bool,juce::String result){if(ticket==loadGeneration)state.setText(result,juce::dontSendNotification);}));
+    processor.loadOnlineTone(id,target,model,callbacks.wrap([this,ticket](bool,juce::String result){if(ticket==loadGeneration)state.setText(result,juce::dontSendNotification);}));
 }
 }

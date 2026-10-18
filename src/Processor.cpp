@@ -186,7 +186,7 @@ void Processor::setStateInformation(const void* data,int size) {
         for(auto& v:*chain.getArray()){auto s=StageSpec::fromVar(v);if(!effectTypes.contains(s.type))throw std::runtime_error("Unknown effect in preset");specs.push_back(std::move(s));}
         auto xml=juce::parseXML(value.getProperty("parameters","").toString());
         if(!xml)throw std::runtime_error("Missing preset parameters");
-        parameters.replaceState(juce::ValueTree::fromXml(*xml));engine.setChain(std::move(specs));setMessage("Preset restored");
+        onlineRequests.clear();parameters.replaceState(juce::ValueTree::fromXml(*xml));engine.setChain(std::move(specs));setMessage("Preset restored");
     }catch(const std::exception& e){setMessage(e.what());}
 }
 juce::AudioProcessorEditor* Processor::createEditor(){return new Editor(*this);}

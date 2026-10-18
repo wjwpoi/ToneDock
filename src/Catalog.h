@@ -17,7 +17,7 @@ public:
     struct Backend {Fetch fetch;Detail detail;};
     explicit Catalog(Backend);
     static Backend forClient(t3k::Client&);
-    void search(CatalogQuery);void more();void select(int toneId);
+    void search(CatalogQuery);void more();void select(int toneId);void clear();
     const juce::Array<t3k::Tone>& tones() const{return results;}
     const t3k::ToneWithModels& detail() const{return selected;}
     bool isLoading() const{return loading;}
