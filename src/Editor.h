@@ -3,6 +3,7 @@
 #include "AuthFlow.h"
 #include "Localization.h"
 #include "Theme.h"
+#include "CatalogMedia.h"
 
 namespace tonedock {
 class OnlineBrowser;
@@ -23,6 +24,9 @@ public:
     void openTone(int id=0);
     void showDevicePage(bool show);
     void showOnlineLibrary(bool show);
+    void showCatalogDemo();
+    void focusOnlineTone(int id);
+    void showCatalogChain(){onlineExpanded=false;showOnlineLibrary(true);}
 private:
     struct ModelRows;class Pedal;class Board;
     void timerCallback() override;
@@ -34,6 +38,8 @@ private:
     void chooseImport();void preset(bool save);
     Processor& processor;
     ui::Theme theme;
+    juce::SharedResourcePointer<CatalogArtwork> artwork;
+    std::map<juce::String,juce::String> modelArtwork;
     juce::TooltipWindow tooltips{this,600};
     std::unique_ptr<ModelRows> modelRows;
     std::unique_ptr<Board> board;
@@ -61,6 +67,8 @@ private:
     juce::String selectedStageId,displayStatus;
     bool devicePageVisible=false;
     bool onlineVisible=false;
+    bool onlineExpanded=true;
+    bool catalogDemo=false;
     int version=-1;
     int refreshTick=0;
     juce::int64 libraryModified=0;

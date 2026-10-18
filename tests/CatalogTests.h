@@ -1,5 +1,6 @@
 #pragma once
 #include "Catalog.h"
+#include "CatalogMedia.h"
 
 inline void testCatalog(const std::function<void(bool,const char*)>& check){
     using namespace tonedock;
@@ -27,6 +28,25 @@ inline void testCatalog(const std::function<void(bool,const char*)>& check){
     t3k::Callback<t3k::Page<t3k::Tone>> late;bool touched=false;
     {Catalog temporary({[&](const auto&,int,std::optional<int>,auto done){late=std::move(done);},[](int,auto){}});temporary.search(q);temporary.changed=[&]{touched=true;};}
     late(page({11},1));check(!touched,"destroyed catalog ignores late network callbacks");
+    std::vector<t3k::Callback<t3k::Nothing>> hearts;
+    Catalog favorites({[](const auto&,int,std::optional<int>,auto){},[](int,auto){},[&](int,bool,auto done){hearts.push_back(std::move(done));}});
+    t3k::Tone popular;popular.id=42;popular.favoritesCount=9;t3k::ToneWithModels detail;detail.tone=popular;favorites.preview({popular},detail);
+    favorites.setFavorite(42,true);check(favorites.isFavoriting() && !favorites.detail().tone.isFavorite,"favorites wait for server confirmation");hearts.back()(t3k::Result<t3k::Nothing>::failure({429,"limited"}));check(!favorites.detail().tone.isFavorite && favorites.detail().tone.favoritesCount==9,"failed favorites preserve server metadata");
+    favorites.setFavorite(42,true);hearts.back()(t3k::Result<t3k::Nothing>::success({}));check(favorites.detail().tone.isFavorite && favorites.tones()[0].favoritesCount==10,"successful favorites update the card and detail together");
+    favorites.setFavorite(42,false);auto lateHeart=hearts.back();favorites.clear();lateHeart(t3k::Result<t3k::Nothing>::success({}));check(favorites.tones().isEmpty() && !favorites.isFavoriting(),"sign out invalidates in-flight favorite callbacks");
+}
+
+inline void testCatalogMedia(const juce::File& directory,const juce::File& fixture,const std::function<void(bool,const char*)>& check){
+    using namespace tonedock;
+    check(compactCount(999)=="999" && compactCount(122800)=="122.8K" && compactCount(2000000)=="2M","catalog popularity uses readable counts without changing exact metadata");
+    auto now=juce::Time::fromISO8601("2026-10-19T12:00:00Z");check(publishedLabel("2026-10-18T12:00:00Z",now)==ui::text("1 天前"),"publication ages use real timestamps");
+    auto raw=juce::JSON::parse(R"({"id":42,"title":"Amp","format":"nam","gear":"amp-cab","models_count":8,"a2_models_count":3,"downloads_count":122800,"favorites_count":900,"is_favorite":true,"published_at":"2026-09-18T00:00:00Z","images":["https://example.invalid/cover.jpg"],"user":{"username":"maker","avatar_url":"https://example.invalid/avatar.png","is_verified":true},"tags":[{"id":3,"name":"clean"}],"makes":[{"id":8,"name":"Fender"}]})");
+    auto tone=t3k::Tone::fromVar(raw),roundtrip=t3k::Tone::fromVar(toneSummary(tone));check(roundtrip.downloadsCount==122800 && roundtrip.favoritesCount==900 && roundtrip.images==tone.images && roundtrip.user.isVerified && roundtrip.a2ModelsCount==3 && roundtrip.tags[0].name=="clean","artwork, social statistics, badges and filter terms survive parsing and history storage");
+    auto history=directory.getChildFile("history");history.createDirectory();rememberTone(tone,history);tone.id=43;rememberTone(tone,history);tone.id=42;rememberTone(tone,history);auto recent=recentTones(history);check(recent.size()==2 && recent[0].id==42 && recent[1].id==43,"recent tones are deduplicated and ordered by actual use");
+    juce::Image source(juce::Image::RGB,600,300,true);juce::MemoryOutputStream stream;juce::PNGImageFormat().writeImageToStream(source,stream);auto image=CatalogArtwork::decode(stream.getMemoryBlock());check(image.getWidth()==256 && image.getHeight()==128,"artwork decoding limits cached resolution while retaining aspect ratio");
+    juce::MemoryBlock bad("bad",3);check(!CatalogArtwork::decode(bad).isValid() && !CatalogArtwork::allowed("file:///private") && !CatalogArtwork::allowed("http://example.com/a.png"),"bad artwork and non-HTTPS image sources fall back safely");
+    CatalogArtwork cache;for(int i=0;i<130;++i)cache.put("fixture-"+juce::String(i),image);check(!cache.get("fixture-0").isValid() && cache.get("fixture-129").isValid(),"artwork memory cache evicts old entries");
+    Library library(directory.getChildFile("artwork-library"));auto entry=library.importFile(fixture);entry.category="My category";entry.favorite=true;library.update(entry);auto* provenance=new juce::DynamicObject;provenance->setProperty("artworkUrl",tone.images[0]);provenance->setProperty("creatorAvatarUrl",tone.user.avatarUrl);auto enriched=library.importFile(fixture,juce::var(provenance));check(enriched.id==entry.id && enriched.artworkUrl==tone.images[0] && enriched.category=="My category" && enriched.favorite && library.entries().size()==1,"adding online artwork enriches duplicate models without losing user edits or creating duplicates");
 }
 
 inline void testOnlineLoading(const juce::File& directory,const juce::File& fixture,const juce::File& invalid,const std::function<void(bool,const char*)>& check){

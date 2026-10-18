@@ -40,6 +40,7 @@ int main(){
         tonedock::Library library(directory.getChildFile("library"));
         auto fixture=directory.getChildFile("Fixture Amp.nam");
         fixture.replaceWithText(R"({"version":"0.5.4","architecture":"Linear","config":{"receptive_field":1,"bias":false},"weights":[0.5],"sample_rate":48000,"metadata":{"name":"Fixture Amp","modeled_by":"Tests","license":"MIT"}})");
+        testCatalogMedia(directory,fixture,check);
         auto entry=library.importFile(fixture);check(entry.category=="Amplifier" && entry.author=="Tests","automatic metadata classification");
         check(library.importFile(fixture).id==entry.id && library.entries().size()==1,"SHA256 deduplication");
         entry.tags={"Clean","Test"};entry.favorite=true;entry.category="Custom";library.update(entry);
@@ -154,8 +155,13 @@ int main(){
             press("audio-page");check(child("device-content")->isVisible() && !viewport->isVisible(),"plugin device tab displays host settings explanation");
             press("work-page");check(viewport->isVisible() && !child("device-content")->isVisible(),"returning from device tab restores pedalboard");
             press("delete-effect");check(child("add-effect")->isEnabled(),"deleting from full chain permits adding again");
-            press("online-page");auto* online=child("online-browser");check(online && online->isVisible() && viewport->isVisible() && viewport->getX()>=440,"online catalog and effect chain remain visible together");
+            press("online-page");auto* online=child("online-browser");check(online && online->isVisible() && !viewport->isVisible() && online->getWidth()>1000,"expanded online catalog has room for artwork and complete details");
+            auto* expand=dynamic_cast<juce::TextButton*>(online->findChildWithID("catalog-expand"));check(expand!=nullptr,"catalog exposes the chain view toggle");expand->onClick();check(viewport->isVisible() && online->getWidth()<520 && viewport->getX()>=440,"catalog can share the compact window with drag targets");
             for(int i=0;i<online->getNumChildComponents();++i){auto* c=online->getChildComponent(i);if(c->isVisible())check(online->getLocalBounds().contains(c->getBounds()),"online catalog controls fit the compact sidebar");}
+            auto* catalogSort=dynamic_cast<juce::ComboBox*>(online->findChildWithID("catalog-sort"));check(catalogSort && catalogSort->getNumItems()==5,"official trending and cumulative popularity have separate sort choices");
+            editor->showCatalogDemo();auto* results=dynamic_cast<juce::ListBox*>(online->findChildWithID("catalog-results"));auto* info=dynamic_cast<juce::TextEditor*>(online->findChildWithID("catalog-detail"));check(results && results->getModel()->getNumRows()==5 && info && info->getText().contains("123456"),"native filled catalog exposes exact popularity data and description");
+            expand->onClick();check(!viewport->isVisible() && online->getWidth()>1000,"filled catalog expands back into a complete browser");
+            for(int i=0;i<online->getNumChildComponents();++i){auto* c=online->getChildComponent(i);if(c->isVisible())check(online->getLocalBounds().contains(c->getBounds()),"populated expanded browser fits the minimum window");}
             press("work-page");check(!online->isVisible() && viewport->getX()==336,"local library layout returns after online browsing");
 
         }

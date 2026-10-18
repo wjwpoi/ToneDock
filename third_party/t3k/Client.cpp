@@ -440,13 +440,13 @@ namespace t3k
         getTone(id,[this,id,done](Result<Tone> tone){
             if(!tone.ok()){done(Result<ToneWithModels>::failure(tone.error));return;}
             auto isNam=tone->format=="nam";
-            listModelsForArchitecture(id,isNam?juce::String("2"):juce::String(),[this,id,t=*tone,isNam,done](Result<juce::Array<Model>> first){
+            listModelsForArchitecture(id,isNam?juce::String("2"):juce::String(),[this,id,t=*tone,isNam,done](Result<juce::Array<Model>> first) mutable {
                 if(!first.ok()){done(Result<ToneWithModels>::failure(first.error));return;}
-                if(!isNam){done(Result<ToneWithModels>::success({t,*first}));return;}
-                listModelsForArchitecture(id,{},[t,models=*first,done](Result<juce::Array<Model>> legacy) mutable {
+                if(!isNam){if(t.format=="ir")t.irsCount=first->size();done(Result<ToneWithModels>::success({t,*first}));return;}
+                t.a2ModelsCount=first->size();listModelsForArchitecture(id,{},[t,models=*first,done](Result<juce::Array<Model>> legacy) mutable {
                     if(!legacy.ok()){done(Result<ToneWithModels>::failure(legacy.error));return;}
                     for(auto& m:*legacy){bool seen=false;for(auto& existing:models)if(existing.id==m.id){seen=true;break;}if(!seen)models.add(m);}
-                    done(Result<ToneWithModels>::success({t,std::move(models)}));
+                    t.modelsCount=models.size();done(Result<ToneWithModels>::success({t,std::move(models)}));
                 });
             });
         });

@@ -75,7 +75,9 @@ public:
         g.setColour(muted);g.setFont(ui::font(13));
         auto caption=stage.type=="NAM" || stage.type=="Cabinet IR"?
             (stage.file.isEmpty()?ui::text("从模型库加载模型"):stage.title):ui::text("内置效果 · 拖动调整顺序");
-        g.drawFittedText(caption,15,75,getWidth()-30,55,juce::Justification::topLeft,3);
+        auto art=editor.modelArtwork.find(stage.file);bool withArt=art!=editor.modelArtwork.end() && art->second.isNotEmpty();
+        if(withArt)paintArtwork(g,{15,76,52,52},editor.artwork->get(art->second),stage.type=="Cabinet IR"?"cab":"amp");
+        g.drawFittedText(caption,withArt?75:15,75,getWidth()-(withArt?90:30),55,juce::Justification::topLeft,3);
         power.setButtonText(ui::text(enabled?"已启用":"已旁通"));
         power.setColour(juce::TextButton::textColourOffId,enabled?colour:muted);
     }
@@ -141,7 +143,7 @@ Editor::Editor(Processor& p):AudioProcessorEditor(p),processor(p) {
     bypassAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.parameters,"bypass",bypass);
     for(int i=0;i<4;++i){auto& k=knobs[size_t(i)];addAndMakeVisible(k);addAndMakeVisible(knobLabels[size_t(i)]);k.setComponentID("stage-knob-"+juce::String(i));k.setRange(0,1,.001);k.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);k.setTextBoxStyle(juce::Slider::TextBoxBelow,false,110,24);
         knobLabels[size_t(i)].setFont(ui::font(14));knobLabels[size_t(i)].setJustificationType(juce::Justification::centred);k.onValueChange=[this,i]{for(auto& s:visibleChain)if(s.id==selectedStageId)s.controls->values[size_t(i)].store(float(knobs[size_t(i)].getValue()));};}
-    processor.onOpenTone=[this](int id){openTone(id);};processor.onStageLoaded=[this](const juce::String& id){syncChain();for(size_t i=0;i<visibleChain.size();++i)if(visibleChain[i].id==id){selectStage(int(i));break;}};setResizable(true,true);setResizeLimits(1120,780,1920,1200);setSize(1360,880);
+    processor.onOpenTone=[this](int id){openTone(id);};processor.onStageLoaded=[this](const juce::String& id){if(onlineVisible && onlineExpanded){onlineExpanded=false;showDevicePage(false);}syncChain();for(size_t i=0;i<visibleChain.size();++i)if(visibleChain[i].id==id){selectStage(int(i));break;}};setResizable(true,true);setResizeLimits(1120,780,1920,1200);setSize(1360,880);
     refreshLibrary();syncChain();if(!visibleChain.empty())selectStage(juce::jmin(1,int(visibleChain.size())-1));startTimerHz(15);
 }
 Editor::~Editor(){processor.onStageLoaded=nullptr;processor.onOpenTone=nullptr;stopTimer();devicePage.reset();browser.reset();chainViewport.setViewedComponent(nullptr,false);board.reset();libraryList.setModel(nullptr);setLookAndFeel(nullptr);}
@@ -159,6 +161,7 @@ void Editor::showDevicePage(bool show) {
     for(auto* c:std::initializer_list<juce::Component*>{&libraryList,&search,&categoryEdit,&tagsEdit,&link,&categoryFilter,&importButton,&loadButton,&favoriteButton,&metadataButton,&removeModelButton,&linkButton})c->setVisible(!show && !onlineVisible);
     if(browser)browser->setVisible(!show && onlineVisible);
     emptyLibrary.setVisible(!show && !onlineVisible && filtered.empty());
+    if(!show && onlineVisible && onlineExpanded){for(int i=0;i<getNumChildComponents();++i){auto* c=getChildComponent(i);if(c==&workButton || c==&onlineButton || c==&audioButton || c==&cloudButton || c==&saveButton || c==&openButton || c==browser.get())continue;c->setVisible(false);}}
     resized();repaint();
 }
 void Editor::paint(juce::Graphics& g) {
@@ -168,7 +171,7 @@ void Editor::paint(juce::Graphics& g) {
     g.setColour(muted);g.setFont(ui::font(12));g.drawText(ui::text("你的音色，你的声音。"),26,51,230,20,juce::Justification::centredLeft);
     g.setColour(ui::line);g.drawHorizontalLine(80,0,float(w));
     if(!devicePageVisible){
-        if(!onlineVisible)ui::card(g,{16,98,298,h-140});ui::card(g,{x,444,rw,h-594});ui::card(g,{x,h-134,rw,82});
+        if(!onlineVisible)ui::card(g,{16,98,298,h-140});if(!onlineVisible || !onlineExpanded){ui::card(g,{x,444,rw,h-594});ui::card(g,{x,h-134,rw,82});}
         g.setColour(ink);g.setFont(ui::font(19));if(!onlineVisible)g.drawText(ui::text("模型库"),30,110,150,28,juce::Justification::centredLeft);
         g.drawText(ui::text("效果链"),x,105,150,30,juce::Justification::centredLeft);
         g.setColour(muted);g.setFont(ui::font(13));g.drawText(juce::String(visibleChain.size())+ui::text(" / 16  ·  ")+ui::text("拖动排序，点击编辑参数"),x,140,400,24,juce::Justification::centredLeft);
@@ -192,7 +195,7 @@ void Editor::resized() {
     int w=getWidth(),h=getHeight(),x=workspaceX(),rw=w-x-24;
     workButton.setBounds(336,24,100,34);onlineButton.setBounds(446,24,104,34);audioButton.setBounds(560,24,80,34);openButton.setBounds(w-378,24,110,34);saveButton.setBounds(w-258,24,110,34);cloudButton.setBounds(w-138,24,114,34);
     if(devicePage)devicePage->setBounds(24,98,w-48,h-148);
-    if(browser)browser->setBounds(16,98,x-40,h-140);
+    if(browser){browser->setBounds(16,98,onlineExpanded?w-32:x-40,h-140);if(onlineVisible)browser->toFront(false);}
     search.setBounds(30,151,270,34);categoryFilter.setBounds(30,195,270,32);libraryList.setBounds(26,239,278,h-548);
     emptyLibrary.setBounds(libraryList.getBounds().reduced(12));
     loadButton.setBounds(30,h-300,166,32);favoriteButton.setBounds(204,h-300,96,32);categoryEdit.setBounds(30,h-258,270,32);tagsEdit.setBounds(30,h-218,270,32);
@@ -219,7 +222,7 @@ void Editor::syncChain() {
     bool found=false;for(size_t i=0;i<visibleChain.size();++i)if(visibleChain[i].id==selectedStageId){selectStage(int(i));found=true;break;}
     if(!found){selectedStageId.clear();if(!visibleChain.empty())selectStage(0);else for(int i=0;i<4;++i){knobs[size_t(i)].setVisible(false);knobLabels[size_t(i)].setVisible(false);}}
     if(visibleChain.empty()){upButton.setEnabled(false);downButton.setEnabled(false);}
-    addButton.setEnabled(visibleChain.size()<16);duplicateButton.setEnabled(!visibleChain.empty() && visibleChain.size()<16);deleteButton.setEnabled(!visibleChain.empty());bypassStageButton.setEnabled(!visibleChain.empty());resized();repaint();
+    addButton.setEnabled(visibleChain.size()<16);duplicateButton.setEnabled(!visibleChain.empty() && visibleChain.size()<16);deleteButton.setEnabled(!visibleChain.empty());bypassStageButton.setEnabled(!visibleChain.empty());if(onlineVisible && onlineExpanded && !devicePageVisible)showDevicePage(false);resized();repaint();
 }
 void Editor::moveStage(int direction){editChain([&](auto& chain){for(int i=0;i<int(chain.size());++i)if(chain[size_t(i)].id==selectedStageId){auto to=i+direction;if(to>=0 && to<int(chain.size()))std::swap(chain[size_t(i)],chain[size_t(to)]);break;}});}
 void Editor::duplicateStage(){juce::String id;editChain([&](auto& chain){if(chain.size()>=16)return;for(size_t i=0;i<chain.size();++i)if(chain[i].id==selectedStageId){auto copy=StageSpec::fromVar(chain[i].toVar());copy.id=juce::Uuid().toString();id=copy.id;chain.insert(chain.begin()+int(i)+1,std::move(copy));break;}});for(size_t i=0;i<visibleChain.size();++i)if(visibleChain[i].id==id)selectStage(int(i));}
@@ -227,7 +230,7 @@ void Editor::refreshLibrary() {
     try {
         auto selectedRow=libraryList.getSelectedRow();
         auto selectedId=selectedRow>=0 && selectedRow<int(filtered.size())?filtered[size_t(selectedRow)].id:juce::String();
-        auto all=processor.services->library.entries();auto query=search.getText().trim();auto id=categoryFilter.getSelectedId();
+        auto all=processor.services->library.entries();modelArtwork.clear();for(auto& m:all)if(m.artworkUrl.isNotEmpty())modelArtwork[processor.services->library.fileFor(m).getFullPathName()]=m.artworkUrl;auto query=search.getText().trim();auto id=categoryFilter.getSelectedId();
         auto filter=id>=3 && id-3<categoryValues.size()?categoryValues[id-3]:juce::String();
         juce::StringArray categories;for(auto& m:all)categories.addIfNotAlreadyThere(m.category);categories.sort(true);
         categoryFilter.clear(juce::dontSendNotification);categoryFilter.addItem(ui::text("All models"),1);categoryFilter.addItem(ui::text("Favorites"),2);categoryValues=categories;for(int i=0;i<categories.size();++i)categoryFilter.addItem(ui::categoryLabel(categories[i]),i+3);
@@ -289,9 +292,11 @@ void Editor::showOnlineLibrary(bool show){
     if(show && !browser){browser=std::make_unique<OnlineBrowser>(processor,[this](const juce::String& format){
         auto type=format=="ir"?juce::String("Cabinet IR"):juce::String("NAM");auto chain=processor.engine.chain();
         for(auto& s:chain)if(s.id==selectedStageId && s.type==type)return s.id;for(auto& s:chain)if(s.type==type)return s.id;return juce::String();
-    });addAndMakeVisible(*browser);}
+    },[this]{onlineExpanded=!onlineExpanded;showDevicePage(false);},catalogDemo);addAndMakeVisible(*browser);}
     onlineVisible=show;showDevicePage(false);
 }
+void Editor::showCatalogDemo(){catalogDemo=true;showOnlineLibrary(true);browser->showDemo();}
+void Editor::focusOnlineTone(int id){showOnlineLibrary(true);if(processor.services->tone3000.isConnected() && id>0)browser->openTone(id,false);}
 void Editor::openTone(int id){showOnlineLibrary(true);if(id>0)browser->openTone(id,true);}
 void Editor::textDropped(const juce::String& text,int x,int y){if(auto id=parseToneLink(text))loadOnlineAt(*id,0,{x,y});}
 void Editor::loadOnlineAt(int id,int modelId,juce::Point<int> position){

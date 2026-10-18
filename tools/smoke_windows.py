@@ -31,6 +31,8 @@ def main():
             ('long-chain-compact', ['--preview-chain', '--compact'], (1120, 780)),
             ('devices', ['--device-page'], (1360, 880)),
             ('catalog', ['--catalog-page'], (1360, 880)),
+            ('catalog-filled', ['--catalog-demo'], (1360, 880)),
+            ('catalog-chain-compact', ['--catalog-demo', '--catalog-chain', '--compact'], (1120, 780)),
         ):
             target = screenshots/f'{name}.png'
             env = {**os.environ, 'TONEDOCK_DATA_DIR': str(directory/f'data-{name}')}

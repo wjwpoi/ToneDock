@@ -1,5 +1,6 @@
 #include "Processor.h"
 #include "Editor.h"
+#include "CatalogMedia.h"
 #include <cmath>
 
 namespace tonedock {
@@ -148,12 +149,13 @@ void Processor::loadOnlineTone(int toneId,const juce::String& target,int modelId
             if(!active()){finish(false,{});return;}
             if(!file.ok()){finish(false,ui::networkError(file.error.status,file.error.message));return;}
             auto* metadata=new juce::DynamicObject;metadata->setProperty("name",tone.title+" / "+model.name);metadata->setProperty("author",tone.user.creatorName());metadata->setProperty("license",tone.license);metadata->setProperty("sourceUrl",tone.url);metadata->setProperty("toneId",juce::String(tone.id));
+            metadata->setProperty("artworkUrl",tone.images.isEmpty()?juce::String():tone.images[0]);metadata->setProperty("creatorAvatarUrl",tone.user.avatarUrl);
             metadata->setProperty("category",tone.format=="ir"?"Cabinet IR":tone.gear=="amp" || tone.gear=="amp-cab"?"Amplifier":tone.gear=="pedal"?"Pedal":"Unsorted");
             juce::Array<juce::var> tags;for(auto& t:tone.tags)tags.add(t.name);for(auto& m:tone.makes)tags.add(m.name);metadata->setProperty("tags",tags);
-            imports.addJob([this,file=*file,provenance=juce::var(metadata),type,target,key,active,finish]{
+            imports.addJob([this,file=*file,provenance=juce::var(metadata),tone,type,target,key,active,finish]{
                 std::optional<ModelEntry> entry;juce::String error;
                 try{entry=services->library.importFile(file,provenance);entry->name=provenance.getProperty("name",entry->name).toString();++libraryVersion;}catch(const std::exception& e){error=juce::String::fromUTF8(e.what());}
-                juce::MessageManager::callAsync(downloadCallbacks.wrap([this,entry=std::move(entry),error,type,target,key,active,finish]{
+                juce::MessageManager::callAsync(downloadCallbacks.wrap([this,entry=std::move(entry),error,tone,type,target,key,active,finish]{
                     if(!active()){finish(false,{});return;}
                     if(!entry){finish(false,ui::text("模型校验失败：")+ui::message(error));return;}
                     auto chain=engine.chain();auto id=target;
@@ -165,7 +167,7 @@ void Processor::loadOnlineTone(int toneId,const juce::String& target,int modelId
                         if(chain.size()>=16){finish(false,ui::text("Maximum 16 effects"));return;}
                         StageSpec s;s.id=key.fromFirstOccurrenceOf("append:",false,false);id=s.id;s.type=type;s.file=services->library.fileFor(*entry).getFullPathName();s.title=entry->name;chain.push_back(std::move(s));
                     }
-                    engine.setChain(std::move(chain));finish(true,ui::text("已加载在线音色：")+entry->name);if(onStageLoaded)onStageLoaded(id);
+                    engine.setChain(std::move(chain));rememberTone(tone,services->library.directory());finish(true,ui::text("已加载在线音色：")+entry->name);if(onStageLoaded)onStageLoaded(id);
                 }));
             });
         }));

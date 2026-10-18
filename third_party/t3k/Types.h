@@ -110,6 +110,7 @@ namespace t3k
         bool isPublic = true;
         juce::Array<Taxonomy> makes, tags;
         int modelsCount = 0, irsCount = 0, downloadsCount = 0, favoritesCount = 0;
+        int a2ModelsCount = -1;
         bool isFavorite = false;
 
         /// "5 models" for NAM tones, "3 IRs" for IR tones.

@@ -42,7 +42,7 @@ juce::var ModelEntry::toVar() const {
     auto* o = new juce::DynamicObject;
     for (auto&& field : {std::pair{"id", id}, {"name", name}, {"kind", kind}, {"category", category},
                         {"architecture", architecture}, {"author", author}, {"license", license},
-                        {"sourceUrl", sourceUrl}, {"toneId", toneId}}) o->setProperty(field.first, field.second);
+                        {"sourceUrl", sourceUrl}, {"toneId", toneId}, {"artworkUrl",artworkUrl}, {"creatorAvatarUrl",creatorAvatarUrl}}) o->setProperty(field.first, field.second);
     juce::Array<juce::var> tagValues; for (const auto& tag : tags) tagValues.add(tag);
     o->setProperty("tags", tagValues); o->setProperty("sampleRate", sampleRate); o->setProperty("favorite", favorite);
     return juce::var(o);
@@ -52,6 +52,7 @@ ModelEntry ModelEntry::fromVar(const juce::var& v) {
     e.id = property(v,"id"); e.name = property(v,"name"); e.kind = property(v,"kind");
     e.category = property(v,"category"); e.architecture = property(v,"architecture"); e.author = property(v,"author");
     e.license = property(v,"license"); e.sourceUrl = property(v,"sourceUrl"); e.toneId = property(v,"toneId");
+    e.artworkUrl=property(v,"artworkUrl");e.creatorAvatarUrl=property(v,"creatorAvatarUrl");
     e.favorite = bool(v.getProperty("favorite",false)); e.sampleRate = double(v.getProperty("sampleRate",0));
     if (auto* a = v.getProperty("tags",{}).getArray()) for (auto& tag : *a) e.tags.add(tag.toString());
     return e;
@@ -114,7 +115,7 @@ ModelEntry Library::importFile(const juce::File& file, const juce::var& provenan
         entry.sampleRate = reader->sampleRate; entry.architecture = "Convolution";
     }
     for (auto&& [key, target] : {std::pair{"author", &entry.author}, {"license", &entry.license},
-        {"sourceUrl", &entry.sourceUrl}, {"toneId", &entry.toneId}, {"category", &entry.category}, {"name", &entry.name}}) {
+        {"sourceUrl", &entry.sourceUrl}, {"toneId", &entry.toneId}, {"category", &entry.category}, {"name", &entry.name}, {"artworkUrl",&entry.artworkUrl}, {"creatorAvatarUrl",&entry.creatorAvatarUrl}}) {
         auto value = property(provenance,key); if (value.isNotEmpty()) *target = value;
     }
     if (auto* values = provenance.getProperty("tags",{}).getArray()) for (auto& tag : *values) entry.tags.addIfNotAlreadyThere(tag.toString());
@@ -123,7 +124,8 @@ ModelEntry Library::importFile(const juce::File& file, const juce::var& provenan
     require(lock.enter(3000), "Library is busy");
     struct Exit { juce::InterProcessLock& l; ~Exit(){l.exit();} } exit{lock};
     auto index = readIndex();
-    for (auto& v : *index.getArray()) if (property(v,"id") == entry.id) return ModelEntry::fromVar(v);
+    for (auto& v : *index.getArray()) if (property(v,"id") == entry.id){auto existing=ModelEntry::fromVar(v);bool changed=false;
+        if(existing.artworkUrl.isEmpty() && entry.artworkUrl.isNotEmpty()){existing.artworkUrl=entry.artworkUrl;changed=true;}if(existing.creatorAvatarUrl.isEmpty() && entry.creatorAvatarUrl.isNotEmpty()){existing.creatorAvatarUrl=entry.creatorAvatarUrl;changed=true;}if(changed){v=existing.toVar();writeIndex(index);}return existing;}
     juce::TemporaryFile temporary(fileFor(entry));
     require(temporary.getFile().replaceWithData(bytes.getData(),bytes.getSize()) && temporary.overwriteTargetFileWithTemporary(), "Cannot copy model into library");
     index.getArray()->add(entry.toVar()); writeIndex(index); return entry;

@@ -6,7 +6,7 @@ namespace tonedock {
 juce::File defaultDataDirectory();
 std::optional<int> parseToneLink(const juce::String&);
 struct ModelEntry {
-    juce::String id, name, kind, category, architecture, author, license, sourceUrl, toneId;
+    juce::String id, name, kind, category, architecture, author, license, sourceUrl, toneId, artworkUrl, creatorAvatarUrl;
     juce::StringArray tags;
     double sampleRate = 0;
     bool favorite = false;

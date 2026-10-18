@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 if(APPLE)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS")
 endif()
-project(ToneDock VERSION 0.3.0 LANGUAGES C CXX)
+project(ToneDock VERSION 0.4.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(MSVC)
@@ -47,7 +47,7 @@ juce_add_plugin(ToneDock COMPANY_NAME "ToneDock" BUNDLE_ID "org.tonedock.effect"
   VST3_CATEGORIES Fx Distortion COPY_PLUGIN_AFTER_BUILD FALSE)
 juce_generate_juce_header(ToneDock)
 file(GLOB T3K_SOURCES CONFIGURE_DEPENDS third_party/t3k/*.cpp)
-target_sources(ToneDock PRIVATE src/Library.cpp src/Engine.cpp src/Processor.cpp src/Catalog.cpp src/OnlineBrowser.cpp src/Editor.cpp ${T3K_SOURCES})
+target_sources(ToneDock PRIVATE src/Library.cpp src/Engine.cpp src/Processor.cpp src/Catalog.cpp src/CatalogMedia.cpp src/OnlineBrowser.cpp src/Editor.cpp ${T3K_SOURCES})
 target_include_directories(ToneDock PUBLIC src third_party/t3k "${CMAKE_CURRENT_BINARY_DIR}/ToneDock_artefacts/JuceLibraryCode")
 set(TONEDOCK_DEFINITIONS JUCE_WEB_BROWSER=0 JUCE_USE_CURL=$<BOOL:$<PLATFORM_ID:Linux>>
   JUCE_ASIO=$<BOOL:$<PLATFORM_ID:Windows>>
