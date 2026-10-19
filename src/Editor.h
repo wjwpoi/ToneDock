@@ -25,6 +25,7 @@ public:
     void showDevicePage(bool show);
     void showOnlineLibrary(bool show);
     void showCatalogDemo();
+    void showCatalogFilters();
     void prepareScreenshot(){tooltips.setMillisecondsBeforeTipAppears(60000); }
     void focusOnlineTone(int id);
     void showCatalogChain(){onlineExpanded=false;showOnlineLibrary(true);}
@@ -34,7 +35,7 @@ private:
     void refreshLibrary();void selectModel(int);void selectStage(int);
     void editChain(const std::function<void(std::vector<StageSpec>&)>&);
     void syncChain();void loadSelectedModel();void moveStage(int);void duplicateStage();
-    int workspaceX() const{return onlineVisible?juce::jlimit(440,520,getWidth()*36/100):336;}
+    int workspaceX() const{return onlineVisible?512:408;}
     void loadOnlineAt(int toneId,int modelId,juce::Point<int>);
     void chooseImport();void preset(bool save);
     Processor& processor;
@@ -55,7 +56,7 @@ private:
     juce::TextButton importButton{ui::text("Import")},cloudButton{ui::text("TONE3000")},loadButton{ui::text("Load model")},favoriteButton{ui::text("Favorite")},
         metadataButton{ui::text("Save tags")},removeModelButton{ui::text("Remove")},addButton{ui::text("+ Add")},deleteButton{ui::text("Delete")},upButton{ui::text("Up")},downButton{ui::text("Down")},
         bypassStageButton{ui::text("Enable / bypass")},audioButton{ui::text("Audio settings")},saveButton{ui::text("Save preset")},openButton{ui::text("Open preset")},linkButton{ui::text("Open link")};
-    juce::TextButton workButton{ui::text("效果链")},onlineButton{ui::text("在线音色")},duplicateButton{ui::text("复制效果")};
+    juce::TextButton workButton{ui::text("效果链")},onlineButton{ui::text("在线音色")},duplicateButton{ui::text("复制")},libraryInfoButton{ui::text("管理信息")};
     juce::Slider inputGain,outputGain;
     juce::ToggleButton bypass{ui::text("Bypass")};
     std::array<juce::Slider,4> knobs;std::array<juce::Label,4> knobLabels;
@@ -70,6 +71,7 @@ private:
     bool onlineVisible=false;
     bool onlineExpanded=true;
     bool catalogDemo=false;
+    bool libraryInfoExpanded=false;
     int version=-1;
     int refreshTick=0;
     juce::int64 libraryModified=0;

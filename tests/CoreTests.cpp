@@ -116,6 +116,7 @@ int main(){
             check(categories && effects && category,"localized category and effect controls exist");
             check(effects->getText()==juce::String::fromUTF8("过载"),"effect chooser renders Chinese");
             check(category->getText()==juce::String::fromUTF8("音箱"),"canonical library category renders Chinese");
+            if(!child("library-category")->isVisible())press("library-info");
             click("Save tags");
             auto savedEntry=guiProcessor.services->library.entries();
             check(std::all_of(savedEntry.begin(),savedEntry.end(),[](const auto& e){return e.category=="Amplifier";}),"saving translated category preserves canonical values");
@@ -155,14 +156,19 @@ int main(){
             press("audio-page");check(child("device-content")->isVisible() && !viewport->isVisible(),"plugin device tab displays host settings explanation");
             press("work-page");check(viewport->isVisible() && !child("device-content")->isVisible(),"returning from device tab restores pedalboard");
             press("delete-effect");check(child("add-effect")->isEnabled(),"deleting from full chain permits adding again");
-            editor->showCatalogDemo();press("online-page");auto* online=child("online-browser");check(online && online->isVisible() && !viewport->isVisible() && online->getWidth()>1000,"expanded online catalog has room for artwork and complete details");
+            editor->showCatalogDemo();press("online-page");auto* online=child("online-browser");check(online && online->isVisible() && !viewport->isVisible() && online->getWidth()>900,"expanded online catalog has room for artwork and complete details");
             auto* expand=dynamic_cast<juce::TextButton*>(online->findChildWithID("catalog-expand"));check(expand!=nullptr,"catalog exposes the chain view toggle");expand->onClick();check(viewport->isVisible() && online->getWidth()<520 && viewport->getX()>=440,"catalog can share the compact window with drag targets");
             for(int i=0;i<online->getNumChildComponents();++i){auto* c=online->getChildComponent(i);if(c->isVisible())check(online->getLocalBounds().contains(c->getBounds()),"online catalog controls fit the compact sidebar");}
             auto* catalogSort=dynamic_cast<juce::ComboBox*>(online->findChildWithID("catalog-sort"));check(catalogSort && catalogSort->getNumItems()==5,"official trending and cumulative popularity have separate sort choices");
             editor->showCatalogDemo();auto* results=dynamic_cast<juce::ListBox*>(online->findChildWithID("catalog-results"));auto* info=dynamic_cast<juce::TextEditor*>(online->findChildWithID("catalog-detail"));check(results && results->getModel()->getNumRows()==5 && info && info->getText().contains("123456"),"native filled catalog exposes exact popularity data and description");
-            expand->onClick();check(!viewport->isVisible() && online->getWidth()>1000,"filled catalog expands back into a complete browser");
+            auto* filterToggle=dynamic_cast<juce::TextButton*>(online->findChildWithID("catalog-filter-toggle"));auto* filterPanel=dynamic_cast<juce::Viewport*>(online->findChildWithID("catalog-filters-panel"));
+            check(filterToggle && filterPanel && !filterPanel->isVisible(),"advanced catalog filters start collapsed");filterToggle->onClick();
+            check(filterPanel->isVisible() && !results->isVisible() && filterPanel->getViewedComponent()->getHeight()>filterPanel->getHeight(),"compact filters scroll without squeezing the tone list or loading controls");
+            check(filterPanel->getViewedComponent()->findChildWithID("catalog-gear")!=nullptr,"device filter remains available inside the filter surface");filterToggle->onClick();
+            check(!filterPanel->isVisible() && results->isVisible(),"closing filters restores the selected catalog results");
+            expand->onClick();check(!viewport->isVisible() && online->getWidth()>900,"filled catalog expands back into a complete browser");
             for(int i=0;i<online->getNumChildComponents();++i){auto* c=online->getChildComponent(i);if(c->isVisible())check(online->getLocalBounds().contains(c->getBounds()),"populated expanded browser fits the minimum window");}
-            press("work-page");check(!online->isVisible() && viewport->getX()==336,"local library layout returns after online browsing");
+            press("work-page");check(!online->isVisible() && viewport->getX()>libraryList->getRight(),"local library layout returns after online browsing");
 
         }
         testOnlineLoading(directory,fixture,invalid,check);

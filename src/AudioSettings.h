@@ -17,5 +17,6 @@ private:
     juce::TextButton refreshButton{ui::text("刷新设备")},controlPanel{ui::text("驱动控制面板")};
     juce::String status;bool refreshing=false;
     juce::Array<double> rates;juce::Array<int> buffers;
+    juce::Rectangle<int> connectionBounds,routingBounds,performanceBounds,liveBounds;
 };
 }

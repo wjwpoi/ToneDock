@@ -13,6 +13,7 @@ public:
     void openTone(int id,bool autoLoad=false,juce::String target={});
     void loadTone(int id,int modelId,juce::String target){catalog.select(id,!client.isConnected());load(id,modelId,target);}
     void showDemo();
+    void showFilters(){filtersExpanded=true;accountExpanded=false;resized();}
 private:
     int getNumRows() override{return catalog.tones().size();}
     void paintListBoxItem(int,juce::Graphics&,int,int,bool) override;
@@ -33,7 +34,10 @@ private:
     juce::TextButton searchButton{ui::text("搜索")},more{ui::text("加载更多")},add{ui::text("新增效果")},replace{ui::text("加载 / 替换")},viewSource{ui::text("官网")},account{ui::text("账号")},filters{ui::text("筛选")},connect{ui::text("登录")},disconnect{ui::text("断开")},official{ui::text("官网选取")};
     juce::TextButton expand{ui::text("展开目录")},favorite{ui::text("收藏音色")},share{ui::text("复制链接")},clear{ui::text("清除")},tagPicker{ui::text("选标签")},makePicker{ui::text("选设备")},creatorPicker{ui::text("选作者")},previous{ui::text("上一页")},next{ui::text("下一页")},previousCapture{ui::text("‹")},nextCapture{ui::text("›")};
     juce::ToggleButton verified{ui::text("认证作者")},calibrated{ui::text("已校准")};
-    juce::ListBox list;juce::Label count,state,empty,pageLabel;juce::Rectangle<int> coverBounds,headingBounds;
+    juce::ListBox list;juce::Label count,state,empty,pageLabel,filterTitle,accountTitle,accountIntro;
+    std::array<juce::Label,6> filterLabels;
+    juce::Rectangle<int> coverBounds,headingBounds,detailBounds,resultsBounds;
+    juce::Viewport filterViewport,accountViewport;juce::Component filterBody,accountBody;
     juce::Component chipStrip;juce::Viewport chipViewport;std::vector<std::unique_ptr<juce::TextButton>> chips;
     std::unique_ptr<t3k::AuthFlow> flow;
     bool accountExpanded=false,filtersExpanded=false,updating=false,started=false,demo=false,toneLoading=false;

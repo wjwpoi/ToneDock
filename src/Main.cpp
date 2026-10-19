@@ -39,6 +39,7 @@ public:
                 if(tokens.contains("--catalog-demo"))editor->showCatalogDemo();
                 else if(tokens.contains("--catalog-page"))editor->showOnlineLibrary(true);
                 if(tokens.contains("--catalog-chain"))editor->showCatalogChain();
+                if(tokens.contains("--catalog-filters"))editor->showCatalogFilters();
                 for(auto& token:tokens)if(token.startsWith("--catalog-focus="))editor->focusOnlineTone(token.fromFirstOccurrenceOf("=",false,false).getIntValue());
             }
             int delay=1800;for(auto& token:tokens)if(token.startsWith("--screenshot-delay="))delay=juce::jlimit(500,30000,token.fromFirstOccurrenceOf("=",false,false).getIntValue());startTimer(delay);
@@ -91,11 +92,12 @@ private:
     }
     class Window : public juce::DocumentWindow {
     public:
-        Window(Application& a,Processor& p):DocumentWindow("ToneDock",juce::Colour(0xff111715),allButtons),app(a) {
-            setUsingNativeTitleBar(true);setContentOwned(p.createEditorIfNeeded(),true);setResizable(true,true);setResizeLimits(1120,810,1920,1230);centreWithSize(getWidth(),getHeight());setVisible(true);
+        Window(Application& a,Processor& p):DocumentWindow("ToneDock",ui::background,allButtons),app(a) {
+            setLookAndFeel(&windowTheme);setUsingNativeTitleBar(false);setTitleBarHeight(36);setContentOwned(p.createEditorIfNeeded(),true);setResizable(true,true);setResizeLimits(1128,824,1928,1244);centreWithSize(getWidth(),getHeight());setVisible(true);
         }
+        ~Window() override{setLookAndFeel(nullptr);}
         void closeButtonPressed() override{app.systemRequestedQuit();}
-    private:Application& app;
+    private:Application& app;ui::Theme windowTheme;
     };
     void handleArguments(const juce::String& commandLine) {
         juce::StringArray files;

@@ -6,7 +6,11 @@ Windows / macOS 的 NAM 模型加载与综合软件效果器。提供独立运�
 
 Windows 免安装 EXE / ZIP 和 macOS 开发包见 [本仓库 Actions](https://github.com/wjwpoi/ToneDock/actions/workflows/tonedock.yml)。Windows 下载 `ToneDock-Windows-portable`，解压其中的便携 ZIP 后直接打开根目录 `ToneDock.exe`；也可运行单独的 EXE。无需本地编译或安装 Visual C++ 运行库。使用说明见 [Windows 便携版](packaging/PORTABLE-WINDOWS.md)。
 
-当前为首版工程。Linux 云端用于编译与自动测试；Windows/macOS 原生构建、DAW 扫描、声卡实测与真实 TONE3000 账号联调分别记录，不用云端编译替代平台验收。见 [验证状态](docs/VALIDATION.md)。
+当前为开发版本。Linux 云端用于编译与自动测试；Windows/macOS 原生构建、DAW 扫描、声卡实测与真实 TONE3000 账号联调分别记录，不用云端编译替代平台验收。见 [验证状态](docs/VALIDATION.md)。
+
+## 浅色 Material 界面
+
+0.5.0 使用浅灰工作区、白色卡片与蓝色重点色，统一导航、输入框、菜单、按钮和设备页。左侧导航在效果链、在线音色与设备之间切换；模型信息管理和在线高级筛选按需展开，保留更大的浏览空间。音色详情支持图文、热度、作者与捕获切换，效果链仍可拖动排序和替换。
 
 ## 功能
 
@@ -56,7 +60,7 @@ Debian云端开发可从仓库根目录运行 `bash tools/cloud_build.sh`，它�
 
 库默认在 `%APPDATA%/ToneDock`（Windows）或 `~/Library/Application Support/ToneDock`（macOS）。可通过 `TONEDOCK_DATA_DIR` 指定其他位置。独立软件保存并恢复上次退出时的链路，库变更会在打开的编辑器内刷新。跨电脑转移预设时也需要转移对应的 `models/` 文件；预设引用内容 ID，不内嵌或重新分发第三方模型权重。
 
-CI 在构建与测试通过后生成 Windows ZIP、独立 EXE 和 SHA256SUMS，检查 EXE / VST3 的运行库依赖，再从 ZIP 解压运行实际 EXE 并生成六个原生界面预览；有数据的界面使用明确标注的离线夹具。真实账号检查另验证下载量等元数据、封面与头像的网络获取和解码、模型下载与音频图准备。推送与工程版本一致的 `vX.Y.Z` 标签会准备带附件的 GitHub Release 草稿，审核后再发布。
+CI 在构建与测试通过后生成 Windows ZIP、独立 EXE 和 SHA256SUMS，检查 EXE / VST3 的运行库依赖，再从 ZIP 解压运行实际 EXE 并生成七个原生界面预览；有数据的界面使用明确标注的离线夹具。真实账号检查另验证下载量等元数据、封面与头像的网络获取和解码、模型下载与音频图准备。推送与工程版本一致的 `vX.Y.Z` 标签会准备带附件的 GitHub Release 草稿，审核后再发布。
 
 ## 首版边界
 
