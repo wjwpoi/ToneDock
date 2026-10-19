@@ -124,7 +124,7 @@ namespace t3k
         /// `parse`, and deliver a Result on the message thread.
         template <typename T>
         void request (const juce::String& method, const juce::String& path, const juce::String& body,
-                      std::function<T (const juce::var&)> parse, Callback<T> done);
+                      std::function<T (const juce::var&)> parse, Callback<T> done, bool optionalAuth = false);
 
         Tokens currentTokens() const;
         void listModelsPage(int toneId,juce::String architecture,int page,juce::Array<Model> collected,Callback<juce::Array<Model>> done);

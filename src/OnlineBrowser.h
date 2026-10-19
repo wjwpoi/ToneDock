@@ -11,12 +11,14 @@ public:
     ~OnlineBrowser() override;
     void paint(juce::Graphics&) override;void resized() override;
     void openTone(int id,bool autoLoad=false,juce::String target={});
+    void loadTone(int id,int modelId,juce::String target){catalog.select(id,!client.isConnected());load(id,modelId,target);}
     void showDemo();
 private:
     int getNumRows() override{return catalog.tones().size();}
     void paintListBoxItem(int,juce::Graphics&,int,int,bool) override;
     juce::String getTooltipForRow(int) override;
     void selectedRowsChanged(int) override;
+    void listBoxItemClicked(int row,const juce::MouseEvent&) override{selectedRowsChanged(row);}
     void listBoxItemDoubleClicked(int,const juce::MouseEvent&) override;
     juce::var getDragSourceDescription(const juce::SparseSet<int>&) override;
     void changeListenerCallback(juce::ChangeBroadcaster*) override{list.repaint();repaint();}

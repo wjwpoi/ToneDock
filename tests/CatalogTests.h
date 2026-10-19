@@ -1,6 +1,9 @@
 #pragma once
 #include "Catalog.h"
 #include "CatalogMedia.h"
+#if JUCE_MAC
+#include <CoreFoundation/CoreFoundation.h>
+#endif
 
 inline void testCatalog(const std::function<void(bool,const char*)>& check){
     using namespace tonedock;
@@ -34,6 +37,16 @@ inline void testCatalog(const std::function<void(bool,const char*)>& check){
     favorites.setFavorite(42,true);check(favorites.isFavoriting() && !favorites.detail().tone.isFavorite,"favorites wait for server confirmation");hearts.back()(t3k::Result<t3k::Nothing>::failure({429,"limited"}));check(!favorites.detail().tone.isFavorite && favorites.detail().tone.favoritesCount==9,"failed favorites preserve server metadata");
     favorites.setFavorite(42,true);hearts.back()(t3k::Result<t3k::Nothing>::success({}));check(favorites.detail().tone.isFavorite && favorites.tones()[0].favoritesCount==10,"successful favorites update the card and detail together");
     favorites.setFavorite(42,false);auto lateHeart=hearts.back();favorites.clear();lateHeart(t3k::Result<t3k::Nothing>::success({}));check(favorites.tones().isEmpty() && !favorites.isFavoriting(),"sign out invalidates in-flight favorite callbacks");
+    std::vector<t3k::Callback<t3k::ToneWithModels>> resolutions;
+    Catalog summaries({[&](const auto&,int,std::optional<int>,auto done){t3k::Page<t3k::Tone> p;p.totalPages=1;t3k::Tone t;t.id=71;t.title="Public summary";p.data.add(t);done(t3k::Result<t3k::Page<t3k::Tone>>::success(p));},[&](int,auto done){resolutions.push_back(std::move(done));}});
+    CatalogQuery summaryQuery;summaryQuery.filters.format="ir";summaries.search(summaryQuery);summaries.select(71,true);
+    check(resolutions.empty() && summaries.detail().tone.title=="Public summary" && !summaries.isDetailLoading() && !summaries.isDetailReady(),"public summary selection exposes metadata without authenticated detail requests");
+    summaries.select(71);check(resolutions.size()==1 && summaries.isDetailLoading(),"a public summary can resolve models after connecting");
+    resolutions.back()(t3k::Result<t3k::ToneWithModels>::failure({429,"limited"}));check(!summaries.isDetailReady() && summaries.detail().tone.id==71 && summaries.detailError().status==429,"failed details preserve the summary without marking it resolved");
+    summaries.select(71);check(resolutions.size()==2 && summaries.isDetailLoading() && summaries.detailError().status==0,"selecting the same tone retries a failed detail request");
+    t3k::ToneWithModels resolved;resolved.tone.id=71;t3k::Model capture;capture.id=7;resolved.models.add(capture);resolutions.back()(t3k::Result<t3k::ToneWithModels>::success(resolved));summaries.select(71);
+    check(summaries.isDetailReady() && summaries.detail().models.size()==1 && resolutions.size()==2,"successful detail selection is cached rather than fetched again");
+    summaries.clear();check(!summaries.isDetailReady(),"clearing the catalog invalidates resolved details");
 }
 
 inline void testCatalogMedia(const juce::File& directory,const juce::File& fixture,const std::function<void(bool,const char*)>& check){
@@ -51,17 +64,39 @@ inline void testCatalogMedia(const juce::File& directory,const juce::File& fixtu
 
 inline void testOnlineLoading(const juce::File& directory,const juce::File& fixture,const juce::File& invalid,const std::function<void(bool,const char*)>& check){
     using namespace tonedock;
+    struct MessageLoop final : juce::Timer {
+        bool stopped=false,timedOut=false;
+        void stop(){
+            stopped=true;stopTimer();
+#if !JUCE_MAC
+            juce::MessageManager::getInstance()->stopDispatchLoop();
+#endif
+        }
+        void timerCallback() override{timedOut=true;stop();}
+        void run(){
+            startTimer(15000);
+#if JUCE_MAC
+            // A console test has no NSApplication. JUCE's macOS dispatch loop
+            // sends [NSApp run], which returns immediately when NSApp is nil.
+            // Its asynchronous queue is attached to the main CFRunLoop instead.
+            while(!stopped)CFRunLoopRunInMode(kCFRunLoopDefaultMode,0.05,true);
+#else
+            juce::MessageManager::getInstance()->runDispatchLoop();
+#endif
+            stopTimer();
+        }
+    } loop;
     auto first=directory.getChildFile("online-a.nam"),second=directory.getChildFile("online-b.nam");
     first.replaceWithText(fixture.loadFileAsString().replace("[0.5]","[0.42]"));second.replaceWithText(fixture.loadFileAsString().replace("[0.5]","[0.43]"));
     Processor processor;check(processor.engine.waitForBuild(),"online test initial graph ready");auto original=processor.engine.chain();
-    struct Download{int id;t3k::Callback<juce::File> done;};std::vector<Download> pending;bool hold=false,timedOut=false,finished=false;int resolves=0;
+    struct Download{int id;t3k::Callback<juce::File> done;};std::vector<Download> pending;bool hold=false,finished=false;int resolves=0;
     std::exception_ptr error;juce::String target;
-    auto guarded=[&](auto fn){try{fn();}catch(...){error=std::current_exception();juce::MessageManager::getInstance()->stopDispatchLoop();}};
+    auto guarded=[&](auto fn){try{fn();}catch(...){error=std::current_exception();loop.stop();}};
     processor.onlineSource.resolve=[&](int id,auto done){++resolves;t3k::ToneWithModels data;data.tone.id=id;data.tone.title="Online tone "+juce::String(id);data.tone.format=id==4?"proteus":"nam";data.tone.gear="amp";data.tone.user.displayName="Creator";data.tone.license="t3k";data.tone.url="https://www.tone3000.com/tones/test-"+juce::String(id);
         if(id!=3){t3k::Model m;m.id=id;m.toneId=id;m.name="Capture";m.modelUrl="https://www.tone3000.com/models/"+juce::String(id)+".nam";data.models.add(m);}done(t3k::Result<t3k::ToneWithModels>::success(std::move(data)));};
     processor.onlineSource.download=[&](const t3k::Model& m,auto done){if(hold)pending.push_back({m.id,std::move(done)});else done(t3k::Result<juce::File>::success(m.id==2?invalid:m.id==5?second:first));};
     std::function<void()> full,presetCancelled,deleted,race,append,bad,unsupported,noModels;
-    full=[&]{guarded([&]{while(processor.engine.chain().size()<16)processor.addEffect("Gain");auto calls=resolves;processor.loadOnlineTone(1,{},0,[&,calls](bool ok,juce::String){guarded([&]{check(!ok && resolves==calls && processor.engine.chain().size()==16,"full chain rejects online loads before network or graph mutation");finished=true;juce::MessageManager::getInstance()->stopDispatchLoop();});});});};
+    full=[&]{guarded([&]{while(processor.engine.chain().size()<16)processor.addEffect("Gain");auto calls=resolves;processor.loadOnlineTone(1,{},0,[&,calls](bool ok,juce::String){guarded([&]{check(!ok && resolves==calls && processor.engine.chain().size()==16,"full chain rejects online loads before network or graph mutation");finished=true;loop.stop();});});});};
     presetCancelled=[&]{guarded([&]{pending.clear();processor.loadOnlineTone(1,{},0,[&](bool ok,juce::String){guarded([&]{check(!ok && processor.engine.chain().size()==4,"opening a preset cancels pending online loads");full();});});juce::MemoryBlock state;processor.getStateInformation(state);processor.setStateInformation(state.getData(),int(state.getSize()));auto done=pending[0].done;done(t3k::Result<juce::File>::success(first));});};
     deleted=[&]{guarded([&]{pending.clear();processor.loadOnlineTone(1,target,0,[&](bool ok,juce::String){guarded([&]{check(!ok && processor.engine.chain().size()==4 && processor.engine.chain()[1].file.isEmpty(),"deleted online target never falls back to another NAM stage");presetCancelled();});});auto chain=processor.engine.chain();std::erase_if(chain,[&](const auto& s){return s.id==target;});processor.engine.setChain(chain);auto done=pending[0].done;done(t3k::Result<juce::File>::success(first));});};
     int raceCompletions=0;
@@ -74,7 +109,6 @@ inline void testOnlineLoading(const juce::File& directory,const juce::File& fixt
     bad=[&]{guarded([&]{processor.loadOnlineTone(2,{},0,[&](bool ok,juce::String){guarded([&]{check(!ok && processor.engine.chain().size()==original.size(),"corrupt online model preserves the existing chain");append();});});});};
     unsupported=[&]{guarded([&]{processor.loadOnlineTone(4,{},0,[&](bool ok,juce::String){guarded([&]{check(!ok && processor.engine.chain().size()==original.size(),"unsupported online formats remain browsable without changing audio");bad();});});});};
     noModels=[&]{guarded([&]{processor.loadOnlineTone(3,{},0,[&](bool ok,juce::String){guarded([&]{check(!ok && processor.engine.chain().size()==original.size(),"empty online captures preserve audio");unsupported();});});});};
-    juce::Timer::callAfterDelay(15000,[&]{timedOut=true;juce::MessageManager::getInstance()->stopDispatchLoop();});
-    juce::MessageManager::callAsync(noModels);juce::MessageManager::getInstance()->runDispatchLoop();
-    if(error)std::rethrow_exception(error);check(!timedOut && finished,"asynchronous online-loading checks complete");
+    check(juce::MessageManager::callAsync(noModels),"online-loading test queues its first callback");loop.run();
+    if(error)std::rethrow_exception(error);check(!loop.timedOut && finished,"asynchronous online-loading checks complete");
 }

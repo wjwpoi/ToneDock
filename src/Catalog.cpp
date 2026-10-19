@@ -23,15 +23,15 @@ Catalog::Backend Catalog::forClient(t3k::Client& client,juce::File historyDirect
     };
 }
 bool Catalog::hasMore() const{return !exhausted[0] || !exhausted[1];}
-void Catalog::clear(){++generation;++selectionGeneration;++favoriteGeneration;favoriting=false;results.clear();seen.clear();selected={};toneId=0;loading=false;detailLoading=false;pending=0;readPage=totalPages=0;exhausted={true,true};batch={};lastError={};lastDetailError={};notify();}
+void Catalog::clear(){++generation;++selectionGeneration;++favoriteGeneration;favoriting=false;results.clear();seen.clear();selected={};toneId=0;loading=false;detailLoading=false;detailReady=false;pending=0;readPage=totalPages=0;exhausted={true,true};batch={};lastError={};lastDetailError={};notify();}
 void Catalog::search(CatalogQuery q,int startPage) {
-    query=std::move(q);++generation;++selectionGeneration;toneId=0;selected={};detailLoading=false;
+    query=std::move(q);++generation;++selectionGeneration;toneId=0;selected={};detailLoading=false;detailReady=false;
     startPage=juce::jmax(1,startPage);results.clear();seen.clear();nextPage={startPage,startPage};readPage=startPage-1;totalPages=0;exhausted={false,true};lastError={};lastDetailError={};loading=false;
     if(query.source==CatalogQuery::all && query.architecture==0 && (query.filters.format.isEmpty() || query.filters.format=="nam"))exhausted[1]=false;
     more();
 }
 void Catalog::jump(int page){if(!loading)search(query,juce::jlimit(1,juce::jmax(1,totalPages),page));}
-void Catalog::preview(juce::Array<t3k::Tone> tones,t3k::ToneWithModels detail){clear();results=std::move(tones);selected=std::move(detail);toneId=selected.tone.id;readPage=totalPages=1;notify();}
+void Catalog::preview(juce::Array<t3k::Tone> tones,t3k::ToneWithModels detail){clear();results=std::move(tones);selected=std::move(detail);toneId=selected.tone.id;detailReady=toneId>0;readPage=totalPages=1;notify();}
 void Catalog::more() {
     if(loading || !hasMore())return;
     loading=true;lastError={};batchError={};batch={};pending=int(!exhausted[0])+int(!exhausted[1]);auto ticket=generation;
@@ -60,9 +60,10 @@ void Catalog::setFavorite(int id,bool value){
     backend.favorite(id,value,callbacks.wrap([this,id,value,ticket](t3k::Result<t3k::Nothing> r){if(ticket!=favoriteGeneration)return;favoriting=false;
         if(!r.ok())lastDetailError=r.error;else{auto apply=[value](t3k::Tone& t){if(t.isFavorite!=value){t.favoritesCount=juce::jmax(0,t.favoritesCount+(value?1:-1));t.isFavorite=value;}};for(auto& t:results)if(t.id==id)apply(t);if(selected.tone.id==id)apply(selected.tone);}notify();}));
 }
-void Catalog::select(int id) {
-    if(id==toneId && (detailLoading || selected.tone.id==id))return;
-    toneId=id;selected={};for(auto& t:results)if(t.id==id){selected.tone=t;break;}detailLoading=true;lastDetailError={};auto ticket=++selectionGeneration;notify();
-    backend.detail(id,callbacks.wrap([this,ticket](t3k::Result<t3k::ToneWithModels> r){if(ticket!=selectionGeneration)return;detailLoading=false;if(r.ok())selected=*r;else lastDetailError=r.error;notify();}));
+void Catalog::select(int id,bool summaryOnly) {
+    if(id==toneId && (detailLoading || detailReady || (summaryOnly && selected.tone.id==id)))return;
+    toneId=id;selected={};for(auto& t:results)if(t.id==id){selected.tone=t;break;}detailReady=false;detailLoading=!summaryOnly;lastDetailError={};auto ticket=++selectionGeneration;notify();
+    if(summaryOnly)return;
+    backend.detail(id,callbacks.wrap([this,ticket](t3k::Result<t3k::ToneWithModels> r){if(ticket!=selectionGeneration)return;detailLoading=false;if(r.ok()){selected=*r;detailReady=true;}else lastDetailError=r.error;notify();}));
 }
 }

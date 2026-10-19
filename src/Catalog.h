@@ -18,7 +18,7 @@ public:
     struct Backend {Fetch fetch;Detail detail;Favorite favorite;};
     explicit Catalog(Backend);
     static Backend forClient(t3k::Client&,juce::File historyDirectory={});
-    void search(CatalogQuery,int startPage=1);void more();void jump(int);void select(int toneId);void clear();
+    void search(CatalogQuery,int startPage=1);void more();void jump(int);void select(int toneId,bool summaryOnly=false);void clear();
     void setFavorite(int,bool);bool isFavoriting() const{return favoriting;}
     void preview(juce::Array<t3k::Tone>,t3k::ToneWithModels);
     int page() const{return readPage;}int pages() const{return totalPages;}
@@ -26,6 +26,7 @@ public:
     const t3k::ToneWithModels& detail() const{return selected;}
     bool isLoading() const{return loading;}
     bool isDetailLoading() const{return detailLoading;}
+    bool isDetailReady() const{return detailReady;}
     bool hasMore() const;
     int selectedId() const{return toneId;}
     const t3k::Error& error() const{return lastError;}
@@ -41,7 +42,7 @@ private:
     std::array<std::optional<t3k::Page<t3k::Tone>>,2> batch;
     std::set<int> seen;
     int generation=0,selectionGeneration=0,favoriteGeneration=0,toneId=0,pending=0,readPage=0,totalPages=0;
-    bool loading=false,detailLoading=false,favoriting=false;
+    bool loading=false,detailLoading=false,detailReady=false,favoriting=false;
     t3k::Error lastError,lastDetailError,batchError;
     t3k::AsyncScope callbacks;
 };

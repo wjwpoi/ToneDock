@@ -306,8 +306,7 @@ void Editor::loadOnlineAt(int id,int modelId,juce::Point<int> position){
         auto point=position-chainViewport.getPosition()+chainViewport.getViewPosition();
         for(size_t i=0;i<visibleChain.size();++i)if(juce::Rectangle<int>(12+int(i)*200,6,176,190).contains(point)){target=visibleChain[i].id;break;}
     }
-    if(!processor.services->tone3000.isConnected()){showOnlineLibrary(true);browser->openTone(id,true,target);return;}
-    processor.loadOnlineTone(id,target,modelId);
+    showOnlineLibrary(true);browser->loadTone(id,modelId,target);
 }
 void Editor::timerCallback() {
     if(version!=processor.libraryVersion.load())refreshLibrary();
