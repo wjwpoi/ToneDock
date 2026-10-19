@@ -155,7 +155,7 @@ int main(){
             press("audio-page");check(child("device-content")->isVisible() && !viewport->isVisible(),"plugin device tab displays host settings explanation");
             press("work-page");check(viewport->isVisible() && !child("device-content")->isVisible(),"returning from device tab restores pedalboard");
             press("delete-effect");check(child("add-effect")->isEnabled(),"deleting from full chain permits adding again");
-            press("online-page");auto* online=child("online-browser");check(online && online->isVisible() && !viewport->isVisible() && online->getWidth()>1000,"expanded online catalog has room for artwork and complete details");
+            editor->showCatalogDemo();press("online-page");auto* online=child("online-browser");check(online && online->isVisible() && !viewport->isVisible() && online->getWidth()>1000,"expanded online catalog has room for artwork and complete details");
             auto* expand=dynamic_cast<juce::TextButton*>(online->findChildWithID("catalog-expand"));check(expand!=nullptr,"catalog exposes the chain view toggle");expand->onClick();check(viewport->isVisible() && online->getWidth()<520 && viewport->getX()>=440,"catalog can share the compact window with drag targets");
             for(int i=0;i<online->getNumChildComponents();++i){auto* c=online->getChildComponent(i);if(c->isVisible())check(online->getLocalBounds().contains(c->getBounds()),"online catalog controls fit the compact sidebar");}
             auto* catalogSort=dynamic_cast<juce::ComboBox*>(online->findChildWithID("catalog-sort"));check(catalogSort && catalogSort->getNumItems()==5,"official trending and cumulative popularity have separate sort choices");

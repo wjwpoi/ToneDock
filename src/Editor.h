@@ -25,6 +25,7 @@ public:
     void showDevicePage(bool show);
     void showOnlineLibrary(bool show);
     void showCatalogDemo();
+    void prepareScreenshot(){tooltips.setMillisecondsBeforeTipAppears(60000); }
     void focusOnlineTone(int id);
     void showCatalogChain(){onlineExpanded=false;showOnlineLibrary(true);}
 private:

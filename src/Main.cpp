@@ -33,6 +33,7 @@ public:
         if(screenshot!=juce::File()){
             if(tokens.contains("--preview-chain"))for(auto type:juce::StringArray{"Compressor","Drive","EQ","Chorus","Delay","Gain","Reverb","Gate"})processor->addEffect(type);
             if(auto* editor=dynamic_cast<Editor*>(processor->getActiveEditor())){
+                editor->prepareScreenshot();
                 if(tokens.contains("--compact"))editor->setSize(1120,780);
                 if(tokens.contains("--device-page"))editor->showDevicePage(true);
                 if(tokens.contains("--catalog-demo"))editor->showCatalogDemo();

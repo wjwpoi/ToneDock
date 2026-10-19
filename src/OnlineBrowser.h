@@ -36,7 +36,7 @@ private:
     juce::ListBox list;juce::Label count,state,empty,pageLabel;juce::Rectangle<int> coverBounds,headingBounds;
     juce::Component chipStrip;juce::Viewport chipViewport;std::vector<std::unique_ptr<juce::TextButton>> chips;
     std::unique_ptr<t3k::AuthFlow> flow;
-    bool accountExpanded=false,filtersExpanded=false,updating=false,started=false,demo=false;
+    bool accountExpanded=false,filtersExpanded=false,updating=false,started=false,demo=false,toneLoading=false;
     int detailId=0,loadGeneration=0,activeToneId=0;juce::String activeStageId;
     t3k::AsyncScope callbacks;
 };
