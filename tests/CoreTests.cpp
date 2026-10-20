@@ -1,5 +1,6 @@
 #include "Processor.h"
 #include "Editor.h"
+#include "OnlineBrowser.h"
 #include "OAuth.h"
 #include <NAM/get_dsp.h>
 #include <atomic>
@@ -95,7 +96,7 @@ int main(){
         check(std::abs(hostAudio.getSample(0,64)-.2f)<1e-6,"host bypass preserves dry signal");
         {
             tonedock::Processor guiProcessor;guiProcessor.loadModel(shared);check(guiProcessor.engine.waitForBuild(),"GUI fixture model loads");
-            std::unique_ptr<tonedock::Editor> editor(static_cast<tonedock::Editor*>(guiProcessor.createEditorIfNeeded()));
+            auto editor=std::make_unique<tonedock::Editor>(guiProcessor,true);
             auto imagePath=juce::SystemStats::getEnvironmentVariable("TONEDOCK_SCREENSHOT",{});
             if(imagePath.isNotEmpty()) {
                 auto target=juce::File(imagePath);target.getParentDirectory().createDirectory();
@@ -104,6 +105,13 @@ int main(){
                 check(juce::PNGImageFormat().writeImageToStream(image,*stream),"render actual native editor screenshot");
             }
             auto child=[&](const juce::String& id)->juce::Component*{for(int i=0;i<editor->getNumChildComponents();++i)if(editor->getChildComponent(i)->getComponentID()==id)return editor->getChildComponent(i);return nullptr;};
+            auto press=[&](const juce::String& id){auto* b=dynamic_cast<juce::TextButton*>(child(id));check(b!=nullptr,"UI control exists by stable ID");b->onClick();};
+            auto* online=dynamic_cast<tonedock::OnlineBrowser*>(child("stage-browser"));auto* viewport=dynamic_cast<juce::Viewport*>(child("chain-viewport"));
+            auto firstNamId=guiProcessor.engine.chain()[1].id;
+            check(online && viewport && online->isVisible() && viewport->isVisible() && online->getWidth()==392 && viewport->getX()>=online->getRight(),"the default NAM opens an embedded tone browser alongside the effect chain");
+            check(online->boundStageId()==firstNamId && online->boundFormat()=="nam","the default browser is bound to the selected NAM identity");
+            check(!child("online-page") && child("local-models"),"local models have their own navigation without a separate online page");
+            press("local-models");check(!online->isVisible() && viewport->isVisible(),"local models remain available without leaving the effect chain");
             auto* libraryList=dynamic_cast<juce::ListBox*>(child("library-list"));auto* search=dynamic_cast<juce::TextEditor*>(child("library-search"));
             check(libraryList && search,"native library controls exist");libraryList->selectRow(0);
             auto extra=directory.getChildFile("extra.nam");extra.replaceWithText(fixture.loadFileAsString().replace("Fixture Amp","AAA Amp").replace("[0.5]","[0.3]"));
@@ -111,7 +119,6 @@ int main(){
             check(libraryList->getSelectedRow()==1,"library refresh preserves model identity after reordering");
             auto click=[&](const juce::String& name){for(int i=0;i<editor->getNumChildComponents();++i)if(auto* button=dynamic_cast<juce::TextButton*>(editor->getChildComponent(i));button && button->getButtonText()==tonedock::ui::text(name)){button->onClick();return;}throw std::runtime_error("UI button missing");};
             auto* categories=dynamic_cast<juce::ComboBox*>(child("library-filter"));auto* effects=dynamic_cast<juce::ComboBox*>(child("effect-choice"));auto* category=dynamic_cast<juce::TextEditor*>(child("library-category"));
-            auto press=[&](const juce::String& id){auto* b=dynamic_cast<juce::TextButton*>(child(id));check(b!=nullptr,"UI control exists by stable ID");b->onClick();};
             check(dynamic_cast<juce::TextButton*>(child("audio-page"))->getButtonText()==juce::String::fromUTF8("设备"),"new device tab label contains real Chinese codepoints");
             check(categories && effects && category,"localized category and effect controls exist");
             check(effects->getText()==juce::String::fromUTF8("过载"),"effect chooser renders Chinese");
@@ -138,37 +145,66 @@ int main(){
             press("add-effect");check(guiProcessor.engine.chain().size()==5 && guiProcessor.engine.chain().back().type=="Drive","Chinese effect chooser adds canonical effect");
             press("overview:"+selected.id);press("move-left");check(guiProcessor.engine.chain()[0].id==selected.id,"UI moves selected effect left");
             press("bypass-effect");check(!selected.controls->enabled.load(),"UI bypasses effect");
-            auto* viewport=dynamic_cast<juce::Viewport*>(child("chain-viewport"));check(viewport!=nullptr,"horizontal chain viewport exists");
+            check(viewport!=nullptr,"horizontal chain viewport exists");
             viewport->setViewPosition(0,0);
             juce::DragAndDropTarget::SourceDetails drag(juce::var("stage:"+selected.id),editor.get(),juce::Point<int>(viewport->getX()+750,viewport->getY()+90));
             editor->itemDropped(drag);check(guiProcessor.engine.chain()[3].id==selected.id,"horizontal drag reorders actual effect chain");
+            auto* reorderedTarget=dynamic_cast<juce::Label*>(online->findChildWithID("catalog-binding-target"));
+            check(online->boundStageId()==selected.id && reorderedTarget && reorderedTarget->getText().contains("04"),"reordering preserves the model target identity and updates its displayed chain position");
             press("duplicate-effect");auto duplicated=guiProcessor.engine.chain()[4];
             check(duplicated.id!=selected.id && duplicated.file==selected.file && duplicated.controls!=selected.controls,"duplicate creates independent controls with the same model");
             auto originalValue=selected.controls->values[0].load();duplicated.controls->values[0]=.9f;check(selected.controls->values[0].load()==originalValue,"duplicated knobs do not change the source effect");
+            press("local-models");
             libraryList->selectRow(0);click("Load model");auto withModel=guiProcessor.engine.chain();
             check(withModel[3].file==selected.file && withModel[4].file!=selected.file,"model loads into selected NAM when two NAM stages exist");
             press("delete-effect");auto edited=guiProcessor.engine.chain();check(edited.size()==5 && std::none_of(edited.begin(),edited.end(),[&](const auto& s){return s.id==duplicated.id;}),"UI removes selected effect");
             for(int i=0;i<14;++i)press("add-effect");check(guiProcessor.engine.chain().size()==16,"chain stops at sixteen effects");
             check(!child("add-effect")->isEnabled() && !child("duplicate-effect")->isEnabled(),"full chain disables adding and duplicating");
-            press("overview:"+guiProcessor.engine.chain().back().id);check(viewport->getViewPositionX()>0,"overview reveals selected pedal beyond the visible chain");
+            auto lastEffectId=guiProcessor.engine.chain().back().id;press("overview:"+lastEffectId);check(viewport->getViewPositionX()>0,"overview reveals selected pedal beyond the visible chain");
             editor->setSize(1120,780);check(viewport->getViewedComponent()->getWidth()>viewport->getWidth(),"long chain scrolls at minimum size");
             for(int i=0;i<editor->getNumChildComponents();++i){auto* c=editor->getChildComponent(i);if(c->isVisible())check(editor->getLocalBounds().contains(c->getBounds()),"visible UI controls stay inside compact editor");}
             press("audio-page");check(child("device-content")->isVisible() && !viewport->isVisible(),"plugin device tab displays host settings explanation");
             press("work-page");check(viewport->isVisible() && !child("device-content")->isVisible(),"returning from device tab restores pedalboard");
-            press("delete-effect");check(child("add-effect")->isEnabled(),"deleting from full chain permits adding again");
-            editor->showCatalogDemo();press("online-page");auto* online=child("online-browser");check(online && online->isVisible() && !viewport->isVisible() && online->getWidth()>900,"expanded online catalog has room for artwork and complete details");
-            auto* expand=dynamic_cast<juce::TextButton*>(online->findChildWithID("catalog-expand"));check(expand!=nullptr,"catalog exposes the chain view toggle");expand->onClick();check(viewport->isVisible() && online->getWidth()<520 && viewport->getX()>=440,"catalog can share the compact window with drag targets");
+            press("overview:"+lastEffectId);press("delete-effect");check(child("add-effect")->isEnabled(),"deleting from full chain permits adding again");
+            effects->setSelectedId(4,juce::sendNotificationSync);press("add-effect");auto addedNam=guiProcessor.engine.chain().back();
+            check(guiProcessor.engine.chain().size()==16 && addedNam.type=="NAM" && addedNam.file.isEmpty(),"adding a NAM creates an empty stage before any model is chosen");
+            check(online->isVisible() && viewport->isVisible() && online->getWidth()==392 && online->boundStageId()==addedNam.id && online->boundFormat()=="nam","a new NAM immediately opens a browser bound to its own stage");
+            press("overview:"+firstNamId);check(online->boundStageId()==firstNamId,"selecting the first of two NAMs rebinds the browser to that identity");
+            press("overview:"+addedNam.id);check(online->boundStageId()==addedNam.id,"selecting the second NAM restores its independent binding");
+            check(bool(guiProcessor.onStageLoaded),"the editor handles asynchronous stage completion");guiProcessor.onStageLoaded(firstNamId);
+            auto* selectedOverview=dynamic_cast<juce::TextButton*>(child("overview:"+addedNam.id));
+            check(selectedOverview && selectedOverview->getToggleState() && online->boundStageId()==addedNam.id,"a late completion for NAM A does not steal selection or the browser from NAM B");
+            press("delete-effect");check(guiProcessor.engine.chain().size()==15 && online->boundStageId()!=addedNam.id,"deleting a bound NAM clears its target without adding a replacement stage");
+            effects->setSelectedId(5,juce::sendNotificationSync);press("add-effect");auto addedIr=guiProcessor.engine.chain().back();
+            check(addedIr.type=="Cabinet IR" && addedIr.file.isEmpty() && online->isVisible() && online->boundStageId()==addedIr.id && online->boundFormat()=="ir","a new cabinet stage opens an IR browser without requiring a local import");
+            auto* filterPanel=dynamic_cast<juce::Viewport*>(online->findChildWithID("catalog-filters-panel"));
+            auto* catalogFormat=filterPanel?dynamic_cast<juce::ComboBox*>(filterPanel->getViewedComponent()->findChildWithID("catalog-format")):nullptr;
+            check(catalogFormat && catalogFormat->getSelectedId()==3 && !catalogFormat->isEnabled(),"an IR binding locks the catalog to the matching model format");
+            press("delete-effect");press("overview:"+firstNamId);
+            check(online->boundStageId()==firstNamId && online->boundFormat()=="nam" && catalogFormat->getSelectedId()==2 && !catalogFormat->isEnabled(),"returning to a NAM restores the correct target and format lock");
+            auto* bindingTitle=dynamic_cast<juce::Label*>(online->findChildWithID("catalog-binding-title"));auto* bindingTarget=dynamic_cast<juce::Label*>(online->findChildWithID("catalog-binding-target"));
+            check(bindingTitle && bindingTarget && bindingTitle->getText().isNotEmpty() && bindingTarget->getText().isNotEmpty(),"the embedded browser explains which effect receives the selected tone");
+            press("audio-page");check(child("device-content")->isVisible() && !online->isVisible() && !viewport->isVisible(),"device settings temporarily hide both browser and chain");
+            press("work-page");check(online->isVisible() && viewport->isVisible() && online->boundStageId()==firstNamId,"returning from devices restores the selected NAM and its embedded browser");
+            press("local-models");check(!online->isVisible() && libraryList->isVisible(),"local models can be opened while keeping the selected NAM");
+            auto sizeBeforeBrowser=guiProcessor.engine.chain().size();press("model-browser");
+            check(online->isVisible() && online->boundStageId()==firstNamId && guiProcessor.engine.chain().size()==sizeBeforeBrowser,"the selected effect opens its online browser without creating another stage");
+            editor->showCatalogDemo();
+            check(online->isVisible() && viewport->isVisible() && online->getWidth()==392,"populated online tones remain embedded alongside the chain");
             for(int i=0;i<online->getNumChildComponents();++i){auto* c=online->getChildComponent(i);if(c->isVisible())check(online->getLocalBounds().contains(c->getBounds()),"online catalog controls fit the compact sidebar");}
             auto* catalogSort=dynamic_cast<juce::ComboBox*>(online->findChildWithID("catalog-sort"));check(catalogSort && catalogSort->getNumItems()==5,"official trending and cumulative popularity have separate sort choices");
-            editor->showCatalogDemo();auto* results=dynamic_cast<juce::ListBox*>(online->findChildWithID("catalog-results"));auto* info=dynamic_cast<juce::TextEditor*>(online->findChildWithID("catalog-detail"));check(results && results->getModel()->getNumRows()==5 && info && info->getText().contains("123456"),"native filled catalog exposes exact popularity data and description");
-            auto* filterToggle=dynamic_cast<juce::TextButton*>(online->findChildWithID("catalog-filter-toggle"));auto* filterPanel=dynamic_cast<juce::Viewport*>(online->findChildWithID("catalog-filters-panel"));
+            auto* results=dynamic_cast<juce::ListBox*>(online->findChildWithID("catalog-results"));auto* info=dynamic_cast<juce::TextEditor*>(online->findChildWithID("catalog-detail"));check(results && results->getModel()->getNumRows()==5 && info && info->getText().contains("123456"),"native filled catalog exposes exact popularity data and description");
+            auto* expand=dynamic_cast<juce::TextButton*>(online->findChildWithID("catalog-expand"));check(expand && results->isVisible() && !info->isVisible(),"the embedded catalog starts with its tone list");expand->onClick();
+            check(!results->isVisible() && info->isVisible() && viewport->isVisible() && online->getWidth()==392,"tone details replace the sidebar list without covering the effect chain");expand->onClick();
+            check(results->isVisible() && !info->isVisible(),"returning from tone details restores the embedded list");
+            auto* addOnline=online->findChildWithID("catalog-add");check(addOnline && !addOnline->isVisible(),"a stage-bound browser has no extra-effect action");
+            auto* filterToggle=dynamic_cast<juce::TextButton*>(online->findChildWithID("catalog-filter-toggle"));
             check(filterToggle && filterPanel && !filterPanel->isVisible(),"advanced catalog filters start collapsed");filterToggle->onClick();
             check(filterPanel->isVisible() && !results->isVisible() && filterPanel->getViewedComponent()->getHeight()>filterPanel->getHeight(),"compact filters scroll without squeezing the tone list or loading controls");
             check(filterPanel->getViewedComponent()->findChildWithID("catalog-gear")!=nullptr,"device filter remains available inside the filter surface");filterToggle->onClick();
             check(!filterPanel->isVisible() && results->isVisible(),"closing filters restores the selected catalog results");
-            expand->onClick();check(!viewport->isVisible() && online->getWidth()>900,"filled catalog expands back into a complete browser");
-            for(int i=0;i<online->getNumChildComponents();++i){auto* c=online->getChildComponent(i);if(c->isVisible())check(online->getLocalBounds().contains(c->getBounds()),"populated expanded browser fits the minimum window");}
-            press("work-page");check(!online->isVisible() && viewport->getX()>libraryList->getRight(),"local library layout returns after online browsing");
+            for(int i=0;i<online->getNumChildComponents();++i){auto* c=online->getChildComponent(i);if(c->isVisible())check(online->getLocalBounds().contains(c->getBounds()),"populated embedded browser fits the minimum window");}
+            press("local-models");check(!online->isVisible() && viewport->getX()>libraryList->getRight(),"local library layout remains available beside the same effect chain");
 
         }
         testOnlineLoading(directory,fixture,invalid,check);

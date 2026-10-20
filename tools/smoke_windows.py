@@ -28,16 +28,18 @@ def main():
         executable, = (directory/'unpacked').glob('*/ToneDock.exe')
         for name, switches, expected in (
             ('pedalboard', [], (1360, 880)),
+            ('local-models', ['--local-models'], (1360, 880)),
             ('long-chain-compact', ['--preview-chain', '--compact'], (1120, 780)),
             ('devices', ['--device-page'], (1360, 880)),
             ('catalog', ['--catalog-page'], (1360, 880)),
             ('catalog-filled', ['--catalog-demo'], (1360, 880)),
-            ('catalog-chain-compact', ['--catalog-demo', '--catalog-chain', '--compact'], (1120, 780)),
-            ('catalog-filters-compact', ['--catalog-demo', '--catalog-chain', '--catalog-filters', '--compact'], (1120, 780)),
+            ('catalog-chain-compact', ['--catalog-demo', '--compact'], (1120, 780)),
+            ('catalog-detail-compact', ['--catalog-demo', '--catalog-detail', '--compact'], (1120, 780)),
+            ('catalog-filters-compact', ['--catalog-demo', '--catalog-filters', '--compact'], (1120, 780)),
         ):
             target = screenshots/f'{name}.png'
             env = {**os.environ, 'TONEDOCK_DATA_DIR': str(directory/f'data-{name}')}
-            subprocess.run([str(executable), '--no-audio', f'--screenshot={target}', *switches],
+            subprocess.run([str(executable), '--no-audio', '--ui-preview', f'--screenshot={target}', *switches],
                            env=env, cwd=executable.parent, check=True, timeout=45)
             image = target.read_bytes()
             if image[:8] != b'\x89PNG\r\n\x1a\n':

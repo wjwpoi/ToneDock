@@ -76,7 +76,11 @@ void Processor::loadModel(const ModelEntry& entry,const juce::String& targetStag
         if(chain.size()>=16){setMessage("Remove an effect before adding this model");return;}
         StageSpec spec;spec.id=juce::Uuid().toString();spec.type=type;chain.push_back(spec);it=std::prev(chain.end());
     }
-    it->file=services->library.fileFor(entry).getFullPathName();it->title=entry.name;
+    auto file=services->library.fileFor(entry).getFullPathName();
+    // A local selection is the newest model choice for this actual stage,
+    // including when the caller selected the fallback NAM / IR stage.
+    onlineRequests.erase(it->id);
+    it->file=file;it->title=entry.name;
     engine.setChain(std::move(chain));setMessage("Model selected: "+entry.name);
 }
 void Processor::importFiles(juce::StringArray files) {
@@ -193,6 +197,6 @@ void Processor::setStateInformation(const void* data,int size) {
         ++onlineEpoch;parameters.replaceState(juce::ValueTree::fromXml(*xml));engine.setChain(std::move(specs));setMessage("Preset restored");
     }catch(const std::exception& e){setMessage(e.what());}
 }
-juce::AudioProcessorEditor* Processor::createEditor(){return new Editor(*this);}
+juce::AudioProcessorEditor* Processor::createEditor(){return new Editor(*this,previewUI);}
 }
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter(){return new tonedock::Processor;}

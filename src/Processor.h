@@ -57,6 +57,7 @@ public:
     std::function<void(int)> onOpenTone;
     std::function<void(const juce::String&)> onStageLoaded;
     std::function<std::unique_ptr<juce::Component>()> createAudioSettings;
+    bool previewUI=false;
 private:
     void timerCallback() override;
     static juce::AudioProcessorValueTreeState::ParameterLayout makeParameters();

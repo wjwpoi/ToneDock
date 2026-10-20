@@ -10,7 +10,7 @@ class OnlineBrowser;
 class Editor : public juce::AudioProcessorEditor, public juce::FileDragAndDropTarget,
     public juce::TextDragAndDropTarget,public juce::DragAndDropContainer,public juce::DragAndDropTarget,private juce::Timer {
 public:
-    explicit Editor(Processor&);
+    explicit Editor(Processor&,bool previewOnly=false);
     ~Editor() override;
     void paint(juce::Graphics&) override;
     void resized() override;
@@ -28,7 +28,9 @@ public:
     void showCatalogFilters();
     void prepareScreenshot(){tooltips.setMillisecondsBeforeTipAppears(60000); }
     void focusOnlineTone(int id);
-    void showCatalogChain(){onlineExpanded=false;showOnlineLibrary(true);}
+    void showCatalogChain(){showOnlineLibrary(true);}
+    void showLocalModels(){showOnlineLibrary(false);}
+    void showCatalogDetails();
 private:
     struct ModelRows;class Pedal;class Board;
     void timerCallback() override;
@@ -37,6 +39,7 @@ private:
     void syncChain();void loadSelectedModel();void moveStage(int);void duplicateStage();
     int workspaceX() const{return onlineVisible?512:408;}
     void loadOnlineAt(int toneId,int modelId,juce::Point<int>);
+    void ensureBrowser();
     void chooseImport();void preset(bool save);
     Processor& processor;
     ui::Theme theme;
@@ -56,7 +59,7 @@ private:
     juce::TextButton importButton{ui::text("Import")},cloudButton{ui::text("TONE3000")},loadButton{ui::text("Load model")},favoriteButton{ui::text("Favorite")},
         metadataButton{ui::text("Save tags")},removeModelButton{ui::text("Remove")},addButton{ui::text("+ Add")},deleteButton{ui::text("Delete")},upButton{ui::text("Up")},downButton{ui::text("Down")},
         bypassStageButton{ui::text("Enable / bypass")},audioButton{ui::text("Audio settings")},saveButton{ui::text("Save preset")},openButton{ui::text("Open preset")},linkButton{ui::text("Open link")};
-    juce::TextButton workButton{ui::text("效果链")},onlineButton{ui::text("在线音色")},duplicateButton{ui::text("复制")},libraryInfoButton{ui::text("管理信息")};
+    juce::TextButton workButton{ui::text("效果链")},onlineButton{ui::text("本地模型")},duplicateButton{ui::text("复制")},libraryInfoButton{ui::text("管理信息")},modelBrowserButton{ui::text("选择在线音色")};
     juce::Slider inputGain,outputGain;
     juce::ToggleButton bypass{ui::text("Bypass")};
     std::array<juce::Slider,4> knobs;std::array<juce::Label,4> knobLabels;
@@ -69,7 +72,6 @@ private:
     juce::String selectedStageId,displayStatus;
     bool devicePageVisible=false;
     bool onlineVisible=false;
-    bool onlineExpanded=true;
     bool catalogDemo=false;
     bool libraryInfoExpanded=false;
     int version=-1;

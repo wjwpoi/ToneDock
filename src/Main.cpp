@@ -11,6 +11,9 @@ public:
     void initialise(const juce::String& commandLine) override {
         ui::installStandaloneTranslations();
         processor=std::make_unique<Processor>();
+        if(!commandLine.containsIgnoreCase("tonedock://")){
+            auto flags=juce::StringArray::fromTokens(commandLine,true);processor->previewUI=flags.contains("--ui-preview") || flags.contains("--catalog-demo");
+        }
         if(!commandLine.containsIgnoreCase("tonedock://"))for(auto& token:juce::StringArray::fromTokens(commandLine,true))if(token.startsWith("--catalog-check=")){
             probeMode=true;probeOutput=juce::File(token.fromFirstOccurrenceOf("=",false,false).unquoted());startCatalogCheck(commandLine);return;
         }
@@ -39,8 +42,10 @@ public:
                 if(tokens.contains("--catalog-demo"))editor->showCatalogDemo();
                 else if(tokens.contains("--catalog-page"))editor->showOnlineLibrary(true);
                 if(tokens.contains("--catalog-chain"))editor->showCatalogChain();
+                if(tokens.contains("--local-models"))editor->showLocalModels();
                 if(tokens.contains("--catalog-filters"))editor->showCatalogFilters();
                 for(auto& token:tokens)if(token.startsWith("--catalog-focus="))editor->focusOnlineTone(token.fromFirstOccurrenceOf("=",false,false).getIntValue());
+                if(tokens.contains("--catalog-detail"))editor->showCatalogDetails();
             }
             int delay=1800;for(auto& token:tokens)if(token.startsWith("--screenshot-delay="))delay=juce::jlimit(500,30000,token.fromFirstOccurrenceOf("=",false,false).getIntValue());startTimer(delay);
         }
@@ -68,6 +73,10 @@ private:
             if(token.startsWith("--catalog-check-sort=")){auto value=token.fromFirstOccurrenceOf("=",false,false);if(juce::StringArray{"best-match","trending","downloads-all-time","newest","oldest"}.contains(value))probeSort=value;}
         }
         probeReport->setProperty("format",format);
+        auto initialChain=processor->engine.chain();probeChainSize=initialChain.size();
+        for(auto& stage:initialChain)if(stage.type==(format=="ir"?"Cabinet IR":"NAM")){probeTargetStage=stage.id;break;}
+        if(probeTargetStage.isEmpty()){finishCatalogCheck(false,"No matching stage for catalog validation");return;}
+        probeReport->setProperty("chainSizeBefore",int(probeChainSize));probeReport->setProperty("targetStageId",probeTargetStage);
         probe=std::make_unique<Catalog>(Catalog::forClient(processor->services->tone3000));
         probe->changed=[this]{
             if(probe->isLoading() || probeLoading)return;
@@ -87,7 +96,12 @@ private:
     void finishCatalogCheck(bool ok,const juce::String& message){
         stopTimer();probeReport->setProperty("passed",ok);probeReport->setProperty("message",message);
         probeReport->setProperty("chainSize",int(processor->engine.chain().size()));
-        if(ok){auto chain=processor->engine.chain();probeReport->setProperty("modelExists",juce::File(chain.back().file).existsAsFile());probeReport->setProperty("modelName",chain.back().title);}
+        if(ok){auto chain=processor->engine.chain();auto target=std::find_if(chain.begin(),chain.end(),[this](const auto& stage){return stage.id==probeTargetStage;});
+            bool replaced=target!=chain.end() && chain.size()==probeChainSize && juce::File(target->file).existsAsFile();
+            probeReport->setProperty("replacedExistingStage",replaced);probeReport->setProperty("modelExists",target!=chain.end() && juce::File(target->file).existsAsFile());
+            if(target!=chain.end())probeReport->setProperty("modelName",target->title);
+            if(!replaced){ok=false;probeReport->setProperty("passed",false);probeReport->setProperty("message","Catalog check did not replace its bound stage");}
+        }
         probeOutput.getParentDirectory().createDirectory();probeOutput.replaceWithText(juce::JSON::toString(juce::var(probeReport.get())));setApplicationReturnValue(ok?0:2);quit();
     }
     class Window : public juce::DocumentWindow {
@@ -118,7 +132,7 @@ private:
                 auto cover=probeArtwork->get(probeToneData.images.isEmpty()?juce::String():probeToneData.images[0]);auto avatar=probeArtwork->get(probeToneData.user.avatarUrl);
                 bool coverReady=probeToneData.images.isEmpty() || cover.isValid(),avatarReady=probeToneData.user.avatarUrl.isEmpty() || avatar.isValid();
                 if(coverReady && avatarReady){probeWaitingForArtwork=false;probeReport->setProperty("coverValidated",coverReady);probeReport->setProperty("avatarValidated",avatarReady);probeReport->setProperty("coverWidth",cover.getWidth());probeReport->setProperty("coverHeight",cover.getHeight());
-                    processor->loadOnlineTone(probeToneData.id,{},0,[this](bool ok,juce::String status){probeReport->setProperty("loadSucceeded",ok);if(!ok){finishCatalogCheck(false,status);return;}probeWaitingForEngine=true;});}
+                    processor->loadOnlineTone(probeToneData.id,probeTargetStage,0,[this](bool ok,juce::String status){probeReport->setProperty("loadSucceeded",ok);if(!ok){finishCatalogCheck(false,status);return;}probeWaitingForEngine=true;});}
             }
             if(probeWaitingForEngine){auto status=processor->engine.status();if(status=="Ready")finishCatalogCheck(true,"Catalog search, download, validation and graph loading passed");else if(status!="Preparing audio chain...")finishCatalogCheck(false,status);}return;
         }
@@ -131,7 +145,7 @@ private:
     std::unique_ptr<Processor> processor;std::unique_ptr<Window> window;
     juce::String pending;juce::File screenshot;
     bool probeMode=false,probeLoading=false,probeWaitingForEngine=false,probeWaitingForArtwork=false;int probeTone=0,probeBatches=0,probeTargetBatches=1;double probeStarted=0;
-    juce::String probeSort;t3k::Tone probeToneData;juce::SharedResourcePointer<CatalogArtwork> probeArtwork;
+    juce::String probeSort,probeTargetStage;size_t probeChainSize=0;t3k::Tone probeToneData;juce::SharedResourcePointer<CatalogArtwork> probeArtwork;
     juce::File probeOutput;juce::DynamicObject::Ptr probeReport;std::unique_ptr<Catalog> probe;
 };
 }

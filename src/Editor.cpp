@@ -74,7 +74,7 @@ public:
         g.setColour(enabled?ink:muted);g.setFont(ui::font(19));g.drawText(ui::text(stage.type),15,37,getWidth()-30,29,juce::Justification::centredLeft);
         g.setColour(muted);g.setFont(ui::font(13));
         auto caption=stage.type=="NAM" || stage.type=="Cabinet IR"?
-            (stage.file.isEmpty()?ui::text("从模型库加载模型"):stage.title):ui::text("内置效果 · 拖动调整顺序");
+            (stage.file.isEmpty()?ui::text("点击选择网站音色"):stage.title):ui::text("内置效果 · 拖动调整顺序");
         auto art=editor.modelArtwork.find(stage.file);bool withArt=art!=editor.modelArtwork.end() && art->second.isNotEmpty();
         if(withArt)paintArtwork(g,{15,76,52,52},editor.artwork->get(art->second),stage.type=="Cabinet IR"?"cab":"amp");
         g.drawFittedText(caption,withArt?75:15,75,getWidth()-(withArt?90:30),55,juce::Justification::topLeft,3);
@@ -103,12 +103,13 @@ public:
 private:Editor& editor;std::vector<std::unique_ptr<Pedal>> pedals;
 };
 
-Editor::Editor(Processor& p):AudioProcessorEditor(p),processor(p) {
+Editor::Editor(Processor& p,bool previewOnly):AudioProcessorEditor(p),processor(p),catalogDemo(previewOnly) {
     setLookAndFeel(&theme);
-    for(auto* c:std::initializer_list<juce::Component*>{&libraryList,&chainViewport,&search,&categoryEdit,&tagsEdit,&link,&categoryFilter,&effectChoice,&importButton,&cloudButton,&loadButton,&favoriteButton,&metadataButton,&removeModelButton,&addButton,&deleteButton,&upButton,&downButton,&bypassStageButton,&audioButton,&saveButton,&openButton,&linkButton,&inputGain,&outputGain,&bypass,&workButton,&onlineButton,&duplicateButton,&libraryInfoButton})addAndMakeVisible(c);
+    for(auto* c:std::initializer_list<juce::Component*>{&libraryList,&chainViewport,&search,&categoryEdit,&tagsEdit,&link,&categoryFilter,&effectChoice,&importButton,&cloudButton,&loadButton,&favoriteButton,&metadataButton,&removeModelButton,&addButton,&deleteButton,&upButton,&downButton,&bypassStageButton,&audioButton,&saveButton,&openButton,&linkButton,&inputGain,&outputGain,&bypass,&workButton,&onlineButton,&duplicateButton,&libraryInfoButton,&modelBrowserButton})addAndMakeVisible(c);
     libraryList.setComponentID("library-list");search.setComponentID("library-search");categoryEdit.setComponentID("library-category");categoryFilter.setComponentID("library-filter");effectChoice.setComponentID("effect-choice");
-    addButton.setComponentID("add-effect");deleteButton.setComponentID("delete-effect");duplicateButton.setComponentID("duplicate-effect");upButton.setComponentID("move-left");downButton.setComponentID("move-right");bypassStageButton.setComponentID("bypass-effect");audioButton.setComponentID("audio-page");onlineButton.setComponentID("online-page");workButton.setComponentID("work-page");chainViewport.setComponentID("chain-viewport");
+    addButton.setComponentID("add-effect");deleteButton.setComponentID("delete-effect");duplicateButton.setComponentID("duplicate-effect");upButton.setComponentID("move-left");downButton.setComponentID("move-right");bypassStageButton.setComponentID("bypass-effect");audioButton.setComponentID("audio-page");onlineButton.setComponentID("local-models");workButton.setComponentID("work-page");chainViewport.setComponentID("chain-viewport");modelBrowserButton.setComponentID("model-browser");
     workButton.setClickingTogglesState(false);audioButton.setButtonText(ui::text("设备"));workButton.setToggleState(true,juce::dontSendNotification);
+    ui::buttonStyle(modelBrowserButton,"tonal");
     upButton.setButtonText(ui::text("前移"));downButton.setButtonText(ui::text("后移"));deleteButton.setButtonText(ui::text("删除"));bypassStageButton.setButtonText(ui::text("旁通"));
     ui::buttonStyle(workButton,"nav-chain");ui::buttonStyle(onlineButton,"nav-catalog");ui::buttonStyle(audioButton,"nav-device");ui::buttonStyle(cloudButton,"tonal");for(auto* b:{&loadButton,&addButton})ui::buttonStyle(*b,"primary");ui::buttonStyle(importButton,"tonal");ui::buttonStyle(deleteButton,"danger");ui::buttonStyle(removeModelButton,"danger");libraryInfoButton.setComponentID("library-info");libraryInfoButton.onClick=[this]{libraryInfoExpanded=!libraryInfoExpanded;libraryInfoButton.setToggleState(libraryInfoExpanded,juce::dontSendNotification);resized();};linkButton.setButtonText(ui::text("打开"));
     modelRows=std::make_unique<ModelRows>(*this);libraryList.setModel(modelRows.get());libraryList.setRowHeight(76);
@@ -136,7 +137,7 @@ Editor::Editor(Processor& p):AudioProcessorEditor(p),processor(p) {
         editChain([this](auto& chain){std::erase_if(chain,[this](const auto& s){return s.id==selectedStageId;});});if(!visibleChain.empty())selectStage(juce::jmin(index,int(visibleChain.size())-1));};
     upButton.onClick=[this]{moveStage(-1);};downButton.onClick=[this]{moveStage(1);};duplicateButton.onClick=[this]{duplicateStage();};
     bypassStageButton.onClick=[this]{for(auto& s:visibleChain)if(s.id==selectedStageId)s.controls->enabled.store(!s.controls->enabled.load());repaint();};
-    audioButton.onClick=[this]{showDevicePage(true);};workButton.onClick=[this]{showOnlineLibrary(false);};onlineButton.onClick=[this]{showOnlineLibrary(true);};
+    audioButton.onClick=[this]{showDevicePage(true);};workButton.onClick=[this]{showDevicePage(false);};onlineButton.onClick=[this]{showOnlineLibrary(false);};modelBrowserButton.onClick=[this]{showOnlineLibrary(true);};
     saveButton.onClick=[this]{preset(true);};openButton.onClick=[this]{preset(false);};
     for(auto* slider:{&inputGain,&outputGain}){slider->setSliderStyle(juce::Slider::LinearHorizontal);slider->setTextBoxStyle(juce::Slider::TextBoxRight,false,70,24);slider->setTextValueSuffix(" dB");}
     inputAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.parameters,"input",inputGain);
@@ -144,7 +145,12 @@ Editor::Editor(Processor& p):AudioProcessorEditor(p),processor(p) {
     bypassAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.parameters,"bypass",bypass);
     for(int i=0;i<4;++i){auto& k=knobs[size_t(i)];addAndMakeVisible(k);addAndMakeVisible(knobLabels[size_t(i)]);k.setComponentID("stage-knob-"+juce::String(i));k.setRange(0,1,.001);k.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);k.setTextBoxStyle(juce::Slider::TextBoxBelow,false,110,24);
         knobLabels[size_t(i)].setFont(ui::font(14));knobLabels[size_t(i)].setJustificationType(juce::Justification::centred);k.onValueChange=[this,i]{for(auto& s:visibleChain)if(s.id==selectedStageId)s.controls->values[size_t(i)].store(float(knobs[size_t(i)].getValue()));};}
-    processor.onOpenTone=[this](int id){openTone(id);};processor.onStageLoaded=[this](const juce::String& id){if(onlineVisible && onlineExpanded){onlineExpanded=false;showDevicePage(false);}syncChain();for(size_t i=0;i<visibleChain.size();++i)if(visibleChain[i].id==id){selectStage(int(i));break;}};setResizable(true,true);setResizeLimits(1120,780,1920,1200);setSize(1360,880);
+    processor.onOpenTone=[this](int id){openTone(id);};processor.onStageLoaded=[this](const juce::String& id){
+        auto current=selectedStageId;auto chain=processor.engine.chain();
+        bool appended=std::none_of(visibleChain.begin(),visibleChain.end(),[&](const auto& stage){return stage.id==id;});
+        bool keepSelection=std::any_of(chain.begin(),chain.end(),[&](const auto& stage){return stage.id==current;});
+        syncChain();if(current==id || !keepSelection || appended)for(size_t i=0;i<visibleChain.size();++i)if(visibleChain[i].id==id){selectStage(int(i));break;}
+    };setResizable(true,true);setResizeLimits(1120,780,1920,1200);setSize(1360,880);
     refreshLibrary();syncChain();if(!visibleChain.empty())selectStage(juce::jmin(1,int(visibleChain.size())-1));startTimerHz(15);
 }
 Editor::~Editor(){processor.onStageLoaded=nullptr;processor.onOpenTone=nullptr;stopTimer();devicePage.reset();browser.reset();chainViewport.setViewedComponent(nullptr,false);board.reset();libraryList.setModel(nullptr);setLookAndFeel(nullptr);}
@@ -157,12 +163,12 @@ void Editor::showDevicePage(bool show) {
     devicePageVisible=show;
     for(int i=0;i<getNumChildComponents();++i){auto* c=getChildComponent(i);if(c==&workButton || c==&onlineButton || c==&audioButton || c==&cloudButton || c==&saveButton || c==&openButton || c==devicePage.get() || c==browser.get())continue;c->setVisible(!show);}
     if(devicePage)devicePage->setVisible(show);
-    workButton.setToggleState(!show && !onlineVisible,juce::dontSendNotification);onlineButton.setToggleState(!show && onlineVisible,juce::dontSendNotification);audioButton.setToggleState(show,juce::dontSendNotification);
+    workButton.setToggleState(!show,juce::dontSendNotification);onlineButton.setToggleState(false,juce::dontSendNotification);audioButton.setToggleState(show,juce::dontSendNotification);
     if(!show)for(size_t i=0;i<visibleChain.size();++i)if(visibleChain[i].id==selectedStageId)selectStage(int(i));
+    if(visibleChain.empty())modelBrowserButton.setVisible(false);
     for(auto* c:std::initializer_list<juce::Component*>{&libraryList,&search,&categoryEdit,&tagsEdit,&link,&categoryFilter,&importButton,&loadButton,&favoriteButton,&metadataButton,&removeModelButton,&linkButton})c->setVisible(!show && !onlineVisible);
     if(browser)browser->setVisible(!show && onlineVisible);
     emptyLibrary.setVisible(!show && !onlineVisible && filtered.empty());
-    if(!show && onlineVisible && onlineExpanded){for(int i=0;i<getNumChildComponents();++i){auto* c=getChildComponent(i);if(c==&workButton || c==&onlineButton || c==&audioButton || c==&cloudButton || c==&saveButton || c==&openButton || c==browser.get())continue;c->setVisible(false);}}
     resized();repaint();
 }
 void Editor::paint(juce::Graphics& g) {
@@ -172,7 +178,7 @@ void Editor::paint(juce::Graphics& g) {
     g.setColour(ink);g.setFont(ui::font(26));g.drawText("ToneDock",104,15,180,38,juce::Justification::centredLeft);
     g.setColour(muted);g.setFont(ui::font(14));g.drawText(ui::text("吉他音色工作台"),286,23,200,25,juce::Justification::centredLeft);
     g.setColour(muted);g.setFont(ui::font(12));g.drawText(JUCE_APPLICATION_VERSION_STRING,12,h-65,60,26,juce::Justification::centred);
-    if(!devicePageVisible && (!onlineVisible || !onlineExpanded)){
+    if(!devicePageVisible){
         if(!onlineVisible){
             ui::card(g,{104,96,280,h-136});g.setColour(ink);g.setFont(ui::font(21));g.drawText(ui::text("模型库"),124,112,150,30,juce::Justification::centredLeft);
             g.setColour(muted);g.setFont(ui::font(13));g.drawText(juce::String(filtered.size())+ui::text(" 个模型"),272,117,90,24,juce::Justification::centredRight);
@@ -183,9 +189,9 @@ void Editor::paint(juce::Graphics& g) {
         for(auto& stage:visibleChain)if(stage.id==selectedStageId){
             g.setColour(ink);g.setFont(ui::font(20));g.drawText(ui::text(stage.type),x+24,439,juce::jmax(100,rw-410),34,juce::Justification::centredLeft);
             if(stage.type=="NAM" || stage.type=="Cabinet IR"){
-                g.setColour(muted);g.setFont(ui::font(15));auto note=stage.file.isEmpty()?ui::text(onlineVisible?"从左侧选择音色，双击或拖入此位置。":"从模型库加载音色，或打开在线音色探索更多。"):stage.title;
-                if(stage.type=="NAM")note+="\n\n"+ui::text("含箱体的音色通常无需额外箱体 IR。");else note+="\n\n"+ui::text("WAV 脉冲响应 · 放在音箱模型之后。");
-                g.drawFittedText(note,x+190,494,rw-214,juce::jmax(90,h-650),juce::Justification::topLeft,5);
+                g.setColour(muted);g.setFont(ui::font(15));auto note=stage.file.isEmpty()?ui::text("从左侧网站音色中选择，直接加载到当前效果器。"):stage.title;
+                note+="\n\n"+ui::text("音色自动缓存，再次打开可直接使用。");
+                g.drawFittedText(note,x+190,494,rw-214,juce::jmax(60,h-710),juce::Justification::topLeft,4);
             }
         }
         if(visibleChain.empty()){g.setColour(muted);g.setFont(ui::font(16));g.drawText(ui::text("添加效果器，开始搭建你的声音"),x+24,486,rw-48,90,juce::Justification::centred);}
@@ -200,7 +206,7 @@ void Editor::resized() {
     workButton.setBounds(8,108,72,72);onlineButton.setBounds(8,196,72,72);audioButton.setBounds(8,284,72,72);
     openButton.setBounds(w-372,18,108,40);saveButton.setBounds(w-254,18,108,40);cloudButton.setBounds(w-136,18,112,40);
     if(devicePage)devicePage->setBounds(104,96,w-128,h-136);
-    if(browser){browser->setBounds(104,96,onlineExpanded?w-128:392,h-136);if(onlineVisible)browser->toFront(false);}
+    if(browser){browser->setBounds(104,96,392,h-136);if(onlineVisible)browser->toFront(false);}
     search.setBounds(122,154,244,40);categoryFilter.setBounds(122,208,244,38);
     int extra=libraryInfoExpanded?192:0;libraryList.setBounds(114,260,260,h-482-extra);emptyLibrary.setBounds(libraryList.getBounds().reduced(14));
     loadButton.setBounds(122,h-208-extra,244,40);favoriteButton.setBounds(122,h-158-extra,112,36);libraryInfoButton.setBounds(244,h-158-extra,122,36);importButton.setBounds(122,h-106,244,40);
@@ -213,6 +219,7 @@ void Editor::resized() {
     int bx=w-400;duplicateButton.setBounds(bx,442,68,34);bypassStageButton.setBounds(bx+74,442,84,34);upButton.setBounds(bx+164,442,56,34);downButton.setBounds(bx+226,442,56,34);deleteButton.setBounds(bx+288,442,64,34);
     int kw=juce::jmin(172,(rw-48)/4),kh=juce::jmin(160,h-670);
     for(int i=0;i<4;++i){knobLabels[size_t(i)].setBounds(x+24+i*kw,490,kw,25);knobs[size_t(i)].setBounds(x+24+i*kw,518,kw,juce::jmax(100,kh));}
+    modelBrowserButton.setBounds(x+190,h-204,170,40);
     inputGain.setBounds(x+68,h-120,rw/2-128,36);outputGain.setBounds(x+rw/2+22,h-120,rw/2-170,36);bypass.setBounds(w-150,h-117,120,32);
 }
 void Editor::loadSelectedModel(){auto row=libraryList.getSelectedRow();if(row>=0 && row<int(filtered.size())){
@@ -223,12 +230,17 @@ void Editor::loadSelectedModel(){auto row=libraryList.getSelectedRow();if(row>=0
     for(size_t i=0;i<visibleChain.size();++i)if(visibleChain[i].type==type && (target.isEmpty() || visibleChain[i].id==target)){selectStage(int(i));break;}
 }}
 void Editor::syncChain() {
-    visibleChain=processor.engine.chain();board->rebuild();overview.clear();
+    visibleChain=processor.engine.chain();
+    if(browser && std::none_of(visibleChain.begin(),visibleChain.end(),[this](const auto& stage){return stage.id==browser->boundStageId();}))browser->clearStageBinding();
+    board->rebuild();overview.clear();
     for(size_t i=0;i<visibleChain.size();++i){auto b=std::make_unique<juce::TextButton>(juce::String(int(i)+1).paddedLeft('0',2)+(visibleChain.size()<=8?"  "+ui::text(visibleChain[i].type):juce::String()));ui::buttonStyle(*b,"compact");b->setComponentID("overview:"+visibleChain[i].id);b->setTooltip(ui::text(visibleChain[i].type)+ui::text(" · ")+visibleChain[i].title);b->onClick=[this,i]{selectStage(int(i));};addAndMakeVisible(*b);b->setVisible(!devicePageVisible);overview.push_back(std::move(b));}
     bool found=false;for(size_t i=0;i<visibleChain.size();++i)if(visibleChain[i].id==selectedStageId){selectStage(int(i));found=true;break;}
-    if(!found){selectedStageId.clear();if(!visibleChain.empty())selectStage(0);else for(int i=0;i<4;++i){knobs[size_t(i)].setVisible(false);knobLabels[size_t(i)].setVisible(false);}}
+    if(!found){selectedStageId.clear();if(!visibleChain.empty())selectStage(0);else{
+        for(int i=0;i<4;++i){knobs[size_t(i)].setVisible(false);knobLabels[size_t(i)].setVisible(false);}
+        modelBrowserButton.setVisible(false);onlineVisible=false;if(browser){browser->clearStageBinding();browser->setVisible(false);}showDevicePage(devicePageVisible);
+    }}
     if(visibleChain.empty()){upButton.setEnabled(false);downButton.setEnabled(false);}
-    addButton.setEnabled(visibleChain.size()<16);duplicateButton.setEnabled(!visibleChain.empty() && visibleChain.size()<16);deleteButton.setEnabled(!visibleChain.empty());bypassStageButton.setEnabled(!visibleChain.empty());if(onlineVisible && onlineExpanded && !devicePageVisible)showDevicePage(false);resized();repaint();
+    addButton.setEnabled(visibleChain.size()<16);duplicateButton.setEnabled(!visibleChain.empty() && visibleChain.size()<16);deleteButton.setEnabled(!visibleChain.empty());bypassStageButton.setEnabled(!visibleChain.empty());resized();repaint();
 }
 void Editor::moveStage(int direction){editChain([&](auto& chain){for(int i=0;i<int(chain.size());++i)if(chain[size_t(i)].id==selectedStageId){auto to=i+direction;if(to>=0 && to<int(chain.size()))std::swap(chain[size_t(i)],chain[size_t(to)]);break;}});}
 void Editor::duplicateStage(){juce::String id;editChain([&](auto& chain){if(chain.size()>=16)return;for(size_t i=0;i<chain.size();++i)if(chain[i].id==selectedStageId){auto copy=StageSpec::fromVar(chain[i].toVar());copy.id=juce::Uuid().toString();id=copy.id;chain.insert(chain.begin()+int(i)+1,std::move(copy));break;}});for(size_t i=0;i<visibleChain.size();++i)if(visibleChain[i].id==id)selectStage(int(i));}
@@ -260,10 +272,14 @@ void Editor::selectModel(int row) {
 }
 
 void Editor::selectStage(int row) {
-    if(row<0 || row>=int(visibleChain.size()))return;auto& s=visibleChain[size_t(row)];selectedStageId=s.id;auto names=parameterNames(s.type);
+    if(row<0 || row>=int(visibleChain.size()))return;auto& s=visibleChain[size_t(row)];bool changed=selectedStageId!=s.id;selectedStageId=s.id;auto names=parameterNames(s.type);
     for(int i=0;i<4;++i){auto& k=knobs[size_t(i)];k.setEnabled(i<names.size());k.setVisible(!devicePageVisible && i<names.size());knobLabels[size_t(i)].setVisible(!devicePageVisible && i<names.size());knobLabels[size_t(i)].setText(i<names.size()?names[i]:"",juce::dontSendNotification);
         k.textFromValueFunction=[t=s.type,i](double value){return parameterText(t,i,value);};k.setValue(s.controls->values[size_t(i)].load(),juce::dontSendNotification);k.updateText();}
     for(size_t i=0;i<overview.size();++i)overview[i]->setToggleState(int(i)==row,juce::dontSendNotification);
+    bool modelStage=s.type=="NAM" || s.type=="Cabinet IR";
+    modelBrowserButton.setVisible(!devicePageVisible && modelStage);modelBrowserButton.setButtonText(ui::text(s.type=="Cabinet IR"?"选择在线箱体":"选择在线音色"));
+    if(changed && !devicePageVisible)showOnlineLibrary(modelStage);
+    else if(onlineVisible && modelStage && browser)browser->bindStage(s.id,s.type=="Cabinet IR"?"ir":"nam",juce::String(row+1).paddedLeft('0',2)+"  "+ui::text(s.type));
     int left=12+row*200,right=left+176,view=chainViewport.getViewPositionX(),width=chainViewport.getMaximumVisibleWidth();
     if(left<view)chainViewport.setViewPosition(left,0);else if(right>view+width)chainViewport.setViewPosition(right-width+12,0);
     upButton.setEnabled(row>0);downButton.setEnabled(row+1<int(visibleChain.size()));repaint();board->repaint();
@@ -294,15 +310,32 @@ void Editor::preset(bool save) {
             if(save){processor.getStateInformation(data);if(!file.withFileExtension("tonedock").replaceWithData(data.getData(),data.getSize()))processor.setMessage("Cannot save preset");}
             else if(file.getSize()<=1024*1024 && file.loadFileAsData(data))processor.setStateInformation(data.getData(),int(data.getSize()));}));
 }
+void Editor::ensureBrowser(){
+    if(browser)return;
+    browser=std::make_unique<OnlineBrowser>(processor,[this](const juce::String& format){
+        auto type=format=="ir"?juce::String("Cabinet IR"):juce::String("NAM");
+        for(auto& s:visibleChain)if(s.id==selectedStageId && s.type==type)return s.id;return juce::String();
+    },std::function<void()>{},catalogDemo);browser->setComponentID("stage-browser");addAndMakeVisible(*browser);
+}
 void Editor::showOnlineLibrary(bool show){
-    if(show && !browser){browser=std::make_unique<OnlineBrowser>(processor,[this](const juce::String& format){
-        auto type=format=="ir"?juce::String("Cabinet IR"):juce::String("NAM");auto chain=processor.engine.chain();
-        for(auto& s:chain)if(s.id==selectedStageId && s.type==type)return s.id;for(auto& s:chain)if(s.type==type)return s.id;return juce::String();
-    },[this]{onlineExpanded=!onlineExpanded;showDevicePage(false);},catalogDemo);addAndMakeVisible(*browser);}
+    if(show){
+        auto selected=std::find_if(visibleChain.begin(),visibleChain.end(),[this](const auto& s){return s.id==selectedStageId && (s.type=="NAM" || s.type=="Cabinet IR");});
+        if(selected==visibleChain.end())selected=std::find_if(visibleChain.begin(),visibleChain.end(),[](const auto& s){return s.type=="NAM" || s.type=="Cabinet IR";});
+        if(selected==visibleChain.end()){
+            if(visibleChain.size()>=16){processor.setMessage(ui::text("请先选择 NAM 或箱体 IR 效果器"));showDevicePage(false);return;}
+            processor.addEffect("NAM");syncChain();selected=std::prev(visibleChain.end());
+        }
+        auto index=int(std::distance(visibleChain.begin(),selected));if(selectedStageId!=selected->id)selectStage(index);
+    }
+    if(show)ensureBrowser();
+    if(show)for(size_t i=0;i<visibleChain.size();++i)if(visibleChain[i].id==selectedStageId){
+        auto& stage=visibleChain[i];browser->bindStage(stage.id,stage.type=="Cabinet IR"?"ir":"nam",juce::String(int(i)+1).paddedLeft('0',2)+"  "+ui::text(stage.type));break;
+    }
     onlineVisible=show;showDevicePage(false);
 }
 void Editor::showCatalogDemo(){catalogDemo=true;showOnlineLibrary(true);browser->showDemo();}
 void Editor::showCatalogFilters(){showOnlineLibrary(true);browser->showFilters();}
+void Editor::showCatalogDetails(){showOnlineLibrary(true);browser->showDetails();}
 void Editor::focusOnlineTone(int id){showOnlineLibrary(true);if(processor.services->tone3000.isConnected() && id>0)browser->openTone(id,false);}
 void Editor::openTone(int id){showOnlineLibrary(true);if(id>0)browser->openTone(id,true);}
 void Editor::textDropped(const juce::String& text,int x,int y){if(auto id=parseToneLink(text))loadOnlineAt(*id,0,{x,y});}
@@ -313,7 +346,8 @@ void Editor::loadOnlineAt(int id,int modelId,juce::Point<int> position){
         auto point=position-chainViewport.getPosition()+chainViewport.getViewPosition();
         for(size_t i=0;i<visibleChain.size();++i)if(juce::Rectangle<int>(12+int(i)*200,6,176,176).contains(point)){target=visibleChain[i].id;break;}
     }
-    showOnlineLibrary(true);browser->loadTone(id,modelId,target);
+    if(target.isNotEmpty())for(size_t i=0;i<visibleChain.size();++i)if(visibleChain[i].id==target && (visibleChain[i].type=="NAM" || visibleChain[i].type=="Cabinet IR")){selectStage(int(i));break;}
+    ensureBrowser();onlineVisible=true;showDevicePage(false);browser->loadTone(id,modelId,target);
 }
 void Editor::timerCallback() {
     if(version!=processor.libraryVersion.load())refreshLibrary();
