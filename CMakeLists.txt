@@ -2,9 +2,15 @@ cmake_minimum_required(VERSION 3.24)
 if(APPLE)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS")
 endif()
-project(ToneDock VERSION 0.1.0 LANGUAGES C CXX)
+project(ToneDock VERSION 0.5.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+if(MSVC)
+  # The portable EXE must run without a separate Visual C++ redistributable.
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+  # Chinese UI strings are UTF-8 on every Windows build host.
+  add_compile_options(/utf-8)
+endif()
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 include(FetchContent)
 include(CTest)
@@ -41,7 +47,7 @@ juce_add_plugin(ToneDock COMPANY_NAME "ToneDock" BUNDLE_ID "org.tonedock.effect"
   VST3_CATEGORIES Fx Distortion COPY_PLUGIN_AFTER_BUILD FALSE)
 juce_generate_juce_header(ToneDock)
 file(GLOB T3K_SOURCES CONFIGURE_DEPENDS third_party/t3k/*.cpp)
-target_sources(ToneDock PRIVATE src/Library.cpp src/Engine.cpp src/Processor.cpp src/Editor.cpp ${T3K_SOURCES})
+target_sources(ToneDock PRIVATE src/Library.cpp src/Engine.cpp src/Processor.cpp src/Catalog.cpp src/CatalogMedia.cpp src/OnlineBrowser.cpp src/Editor.cpp ${T3K_SOURCES})
 target_include_directories(ToneDock PUBLIC src third_party/t3k "${CMAKE_CURRENT_BINARY_DIR}/ToneDock_artefacts/JuceLibraryCode")
 set(TONEDOCK_DEFINITIONS JUCE_WEB_BROWSER=0 JUCE_USE_CURL=$<BOOL:$<PLATFORM_ID:Linux>>
   JUCE_ASIO=$<BOOL:$<PLATFORM_ID:Windows>>
@@ -62,7 +68,7 @@ endif()
 juce_add_gui_app(ToneDockApp PRODUCT_NAME "ToneDock" COMPANY_NAME "ToneDock" BUNDLE_ID "org.tonedock.app"
   MICROPHONE_PERMISSION_ENABLED TRUE MICROPHONE_PERMISSION_TEXT "ToneDock processes audio from your guitar interface."
   PLIST_TO_MERGE "${CMAKE_CURRENT_SOURCE_DIR}/packaging/Info.plist")
-target_sources(ToneDockApp PRIVATE src/Main.cpp)
+target_sources(ToneDockApp PRIVATE src/Main.cpp src/AudioSettings.cpp)
 add_library(tonedock_link_only INTERFACE)
 target_link_libraries(tonedock_link_only INTERFACE "$<LINK_ONLY:ToneDock>")
 function(tonedock_link_application target)

@@ -267,12 +267,23 @@ namespace t3k
 
     template <typename T>
     void Client::request (const juce::String& method, const juce::String& path, const juce::String& body,
-                          std::function<T (const juce::var&)> parse, Callback<T> done)
+                          std::function<T (const juce::var&)> parse, Callback<T> done, bool optionalAuth)
     {
         done = callbacks.wrap(std::move(done));
-        pool.addJob ([this, method, path, body, parseFn = std::move (parse), cb = std::move (done)]
+        pool.addJob ([this, method, path, body, optionalAuth, parseFn = std::move (parse), cb = std::move (done)]
         {
             auto response = authenticatedRequest (method, path, body);
+            // Only the public Trending feed opts in. Search, captures and account
+            // mutations keep their normal authentication and access checks.
+            if (optionalAuth && (response.error.status == 401 || response.http.status == 401))
+            {
+                HttpRequest req;
+                req.url = juce::URL (origin + path);
+                req.headers.set ("Accept", "application/json");
+                response = {};
+                response.http = Http::sendSync (req);
+                if (response.http.status == 0) response.error = { 0, response.http.error };
+            }
 
             Result<T> result;
             if (response.failed())
@@ -403,7 +414,7 @@ namespace t3k
     {
         auto url = relative ("/api/v1/tones/trending");
         if (gear.isNotEmpty()) url = url.withParameter ("gear", gear);
-        request<juce::Array<Tone>> ("GET", pathOf (url), {}, parseToneFeed, std::move (done));
+        request<juce::Array<Tone>> ("GET", pathOf (url), {}, parseToneFeed, std::move (done), true);
     }
 
     void Client::listLatestTones (Callback<juce::Array<Tone>> done)
@@ -433,21 +444,36 @@ namespace t3k
 
     void Client::listModels (int toneId, Callback<juce::Array<Model>> done)
     {
-        listModelsPage(toneId,1,{},std::move(done));
+        listModelsForArchitecture(toneId,architecture>0?juce::String(architecture):juce::String(),std::move(done));
     }
-
-    void Client::listModelsPage(int toneId,int page,juce::Array<Model> collected,Callback<juce::Array<Model>> done)
+    void Client::listModelsForArchitecture(int toneId,juce::String architecture,Callback<juce::Array<Model>> done){listModelsPage(toneId,std::move(architecture),1,{},std::move(done));}
+    void Client::getToneWithAllModels(int id,Callback<ToneWithModels> done) {
+        getTone(id,[this,id,done](Result<Tone> tone){
+            if(!tone.ok()){done(Result<ToneWithModels>::failure(tone.error));return;}
+            auto isNam=tone->format=="nam";
+            listModelsForArchitecture(id,isNam?juce::String("2"):juce::String(),[this,id,t=*tone,isNam,done](Result<juce::Array<Model>> first) mutable {
+                if(!first.ok()){done(Result<ToneWithModels>::failure(first.error));return;}
+                if(!isNam){if(t.format=="ir")t.irsCount=first->size();done(Result<ToneWithModels>::success({t,*first}));return;}
+                t.a2ModelsCount=first->size();listModelsForArchitecture(id,{},[t,models=*first,done](Result<juce::Array<Model>> legacy) mutable {
+                    if(!legacy.ok()){done(Result<ToneWithModels>::failure(legacy.error));return;}
+                    for(auto& m:*legacy){bool seen=false;for(auto& existing:models)if(existing.id==m.id){seen=true;break;}if(!seen)models.add(m);}
+                    t.modelsCount=models.size();done(Result<ToneWithModels>::success({t,std::move(models)}));
+                });
+            });
+        });
+    }
+    void Client::listModelsPage(int toneId,juce::String filter,int page,juce::Array<Model> collected,Callback<juce::Array<Model>> done)
     {
         auto url = relative ("/api/v1/models")
                        .withParameter ("tone_id", juce::String (toneId))
                        .withParameter ("page_size", juce::String (kModelsPageSize))
                        .withParameter ("page",juce::String(page));
-        if (architecture > 0) url = url.withParameter("architecture",juce::String(architecture));
+        if (filter.isNotEmpty()) url = url.withParameter("architecture",filter);
         request<Page<Model>>("GET",pathOf(url),{},Page<Model>::fromVar,
-            [this,toneId,page,collected=std::move(collected),done](Result<Page<Model>> result) mutable {
+            [this,toneId,filter,page,collected=std::move(collected),done](Result<Page<Model>> result) mutable {
                 if(!result.ok()){done(Result<juce::Array<Model>>::failure(result.error));return;}
                 collected.addArray(result->data);
-                if(page<result->totalPages && !result->data.isEmpty())listModelsPage(toneId,page+1,std::move(collected),std::move(done));
+                if(page<result->totalPages && !result->data.isEmpty())listModelsPage(toneId,filter,page+1,std::move(collected),std::move(done));
                 else done(Result<juce::Array<Model>>::success(std::move(collected)));
             });
     }

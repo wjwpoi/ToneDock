@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 jobs:
   desktop:
     strategy:
@@ -16,9 +19,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: false
+      - name: Use official Eigen mirror
+        # Keep NAM's pinned submodule commits; avoid GitLab clone outages.
+        run: git config --global 'url.https://github.com/eigen-mirror/eigen.insteadOf' https://gitlab.com/libeigen/eigen
       - name: Configure Windows
         if: runner.os == 'Windows'
         run: cmake -S . -B build -A x64 -DBUILD_TESTING=ON
+      - name: Test Windows packaging rules
+        run: python -m unittest discover -s tests -p test_package_windows.py -v
       - name: Configure macOS universal
         if: runner.os == 'macOS'
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES='arm64;x86_64' -DBUILD_TESTING=ON
@@ -28,6 +36,12 @@ jobs:
         run: python tools/ci_step.py "Audio and library tests" -- ctest --test-dir build -C Release --output-on-failure --no-tests=error
       - name: Package dependency notices
         run: python tools/package_notices.py --build build
+      - name: Package portable Windows EXE and VST3
+        if: runner.os == 'Windows'
+        run: python tools/ci_step.py "Package portable Windows" -- python tools/package_windows.py --build build
+      - name: Launch packaged EXE and render native UI
+        if: runner.os == 'Windows'
+        run: python tools/ci_step.py "Smoke portable EXE" -- python tools/smoke_windows.py --build build
       - name: Validate AU
         if: runner.os == 'macOS'
         run: python tools/ci_step.py "Validate AU" -- bash tools/validate_au.sh build/ToneDock_artefacts/Release/AU/ToneDock.component
@@ -38,20 +52,19 @@ jobs:
         if: failure()
         with:
           name: ToneDock-${{ runner.os }}-diagnostics
-          path: build/ci-logs/
+          path: |
+            build/ci-logs/
+            build/previews/*.png
+            build/portable/*-portable.zip
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:
-          name: ToneDock-${{ runner.os }}-development
+          name: ToneDock-Windows-portable
           path: |
-            build/ToneDockApp_artefacts/Release/
-            build/ToneDock_artefacts/Release/VST3/
-            build/ToneDock_artefacts/Release/AU/
-            packaging/
-            build/notices/
-            README.md
-            LICENSE
-            docs/
+            build/portable/*.zip
+            build/portable/*.exe
+            build/portable/SHA256SUMS.txt
+            build/previews/*.png
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: runner.os == 'macOS'
@@ -59,3 +72,24 @@ jobs:
           name: ToneDock-macOS-development
           path: build/ToneDock-macOS-development.tar.gz
           if-no-files-found: error
+  draft-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: desktop
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: ToneDock-*
+      - name: Prepare draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version=$(sed -n 's/project(ToneDock VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          test "$GITHUB_REF_NAME" = "v$version"
+          mapfile -d '' assets < <(find release-assets -type f \( -name '*.zip' -o -name '*.exe' -o -name 'SHA256SUMS.txt' -o -name '*.tar.gz' \) -print0)
+          gh release create "$GITHUB_REF_NAME" --draft --title "ToneDock $version" --generate-notes "${assets[@]}"

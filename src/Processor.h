@@ -2,6 +2,8 @@
 #include "Engine.h"
 #include "Library.h"
 #include "Client.h"
+#include "Localization.h"
+#include <map>
 
 namespace tonedock {
 struct Services {
@@ -28,15 +30,22 @@ public:
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
     void setCurrentProgram(int) override {}
-    const juce::String getProgramName(int) override { return "Default"; }
+    const juce::String getProgramName(int) override { return ui::text("Default"); }
     void changeProgramName(int,const juce::String&) override {}
     void getStateInformation(juce::MemoryBlock&) override;
     void setStateInformation(const void*,int) override;
     void addEffect(const juce::String& type);
-    void loadModel(const ModelEntry&);
+    void loadModel(const ModelEntry&,const juce::String& targetStageId={});
     void importFiles(juce::StringArray);
     void importDownloaded(juce::File,juce::var provenance);
     void downloadModel(t3k::Model,juce::var provenance,std::function<void(juce::String)> completion={});
+    using OnlineCompletion=std::function<void(bool,juce::String)>;
+    struct OnlineSource {
+        std::function<void(int,t3k::Callback<t3k::ToneWithModels>)> resolve;
+        std::function<void(const t3k::Model&,t3k::Callback<juce::File>)> download;
+    } onlineSource;
+    // An empty target appends. An explicit target must still exist and match the format at commit time.
+    void loadOnlineTone(int toneId,const juce::String& targetStageId={},int modelId=0,OnlineCompletion={});
     void openToneLink(juce::String);
     void setMessage(juce::String);
     juce::String message() const;
@@ -46,7 +55,9 @@ public:
     std::atomic<float> inputPeak{0},outputPeak{0};
     std::atomic<int> libraryVersion{0};
     std::function<void(int)> onOpenTone;
-    std::function<void()> onAudioSettings;
+    std::function<void(const juce::String&)> onStageLoaded;
+    std::function<std::unique_ptr<juce::Component>()> createAudioSettings;
+    bool previewUI=false;
 private:
     void timerCallback() override;
     static juce::AudioProcessorValueTreeState::ParameterLayout makeParameters();
@@ -57,6 +68,9 @@ private:
     mutable std::mutex messageMutex;
     juce::String notification;
     juce::ThreadPool imports{1};
+    juce::uint64 onlineSerial=0;
+    std::atomic<juce::uint64> onlineEpoch{0};
+    std::map<juce::String,juce::uint64> onlineRequests;
     t3k::AsyncScope downloadCallbacks;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Processor)
 };

@@ -132,6 +132,7 @@ namespace t3k
         if (auto* arr = v.getProperty ("tags", juce::var()).getArray())
             for (auto& m : *arr) t.tags.add (Taxonomy::fromVar (m));
         t.modelsCount = num (v, "models_count");
+        t.a2ModelsCount = (int) v.getProperty("a2_models_count",-1);
         t.irsCount = num (v, "irs_count");
         t.downloadsCount = num (v, "downloads_count");
         t.favoritesCount = num (v, "favorites_count");
