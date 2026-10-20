@@ -112,7 +112,7 @@ void OnlineBrowser::resetFilters(){
 }
 void OnlineBrowser::chooseFilter(int kind){
     if(!client.isConnected() || demo)return;auto* anchor=kind==0?&tagPicker:kind==1?&makePicker:&creatorPicker;
-    auto picker=std::make_unique<FilterPicker>(client,kind,callbacks.wrap([this,kind](juce::String value){auto* field=kind==0?&tags:kind==1?&makes:&creators;auto items=values(field->getText());items.addIfNotAlreadyThere(value);field->setText(items.joinIntoString(", "),false);searchCatalog();}));juce::CallOutBox::launchAsynchronously(std::move(picker),getLocalArea(anchor,anchor->getLocalBounds()),this);
+    auto picker=std::make_unique<FilterPicker>(client,kind,callbacks.wrap([this,kind](juce::String value){auto* field=kind==0?&tags:kind==1?&makes:&creators;auto items=values(field->getText());items.addIfNotAlreadyThere(value);field->setText(items.joinIntoString(", "),false);searchCatalog();}));picker->setSize(juce::jmin(380,getWidth()-48),400);juce::CallOutBox::launchAsynchronously(std::move(picker),getLocalArea(anchor,anchor->getLocalBounds()),this);
 }
 bool OnlineBrowser::readyKey(){if(client.publishableKey().isNotEmpty())return true;if(processor.services->configureKey(key.getText())){key.setReadOnly(true);return true;}accountExpanded=true;filtersExpanded=false;resized();state.setText(ui::text("请先填写 TONE3000 的 t3k_pub_ 公开 Key。"),juce::dontSendNotification);return false;}
 void OnlineBrowser::authenticate(t3k::FlowRequest::Kind kind,int id,juce::String target){
