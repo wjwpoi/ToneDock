@@ -34,7 +34,7 @@ public:
             if(tokens.contains("--preview-chain"))for(auto type:juce::StringArray{"Compressor","Drive","EQ","Chorus","Delay","Gain","Reverb","Gate"})processor->addEffect(type);
             if(auto* editor=dynamic_cast<Editor*>(processor->getActiveEditor())){
                 editor->prepareScreenshot();
-                if(tokens.contains("--compact"))editor->setSize(1120,780);
+                if(tokens.contains("--compact"))window->setContentComponentSize(1120,780);
                 if(tokens.contains("--device-page"))editor->showDevicePage(true);
                 if(tokens.contains("--catalog-demo"))editor->showCatalogDemo();
                 else if(tokens.contains("--catalog-page"))editor->showOnlineLibrary(true);
@@ -93,7 +93,10 @@ private:
     class Window : public juce::DocumentWindow {
     public:
         Window(Application& a,Processor& p):DocumentWindow("ToneDock",ui::background,allButtons),app(a) {
-            setLookAndFeel(&windowTheme);setUsingNativeTitleBar(false);setTitleBarHeight(36);setContentOwned(p.createEditorIfNeeded(),true);setResizable(true,true);setResizeLimits(1128,824,1928,1244);centreWithSize(getWidth(),getHeight());setVisible(true);
+            setLookAndFeel(&windowTheme);setUsingNativeTitleBar(false);setTitleBarHeight(36);setContentOwned(p.createEditorIfNeeded(),true);setResizable(true,true);
+            auto border=getContentComponentBorder();
+            setResizeLimits(1120+border.getLeftAndRight(),780+border.getTopAndBottom(),1920+border.getLeftAndRight(),1200+border.getTopAndBottom());
+            centreWithSize(getWidth(),getHeight());setVisible(true);
         }
         ~Window() override{setLookAndFeel(nullptr);}
         void closeButtonPressed() override{app.systemRequestedQuit();}

@@ -40,8 +40,11 @@ def main():
             subprocess.run([str(executable), '--no-audio', f'--screenshot={target}', *switches],
                            env=env, cwd=executable.parent, check=True, timeout=45)
             image = target.read_bytes()
-            if image[:8] != b'\x89PNG\r\n\x1a\n' or struct.unpack_from('>II', image, 16) != expected:
-                raise SystemExit(f'Invalid native screenshot: {target}')
+            if image[:8] != b'\x89PNG\r\n\x1a\n':
+                raise SystemExit(f'Invalid native PNG: {target}')
+            actual = struct.unpack_from('>II', image, 16)
+            if actual != expected:
+                raise SystemExit(f'Invalid native screenshot: {target}; expected {expected}, got {actual}')
             print(f'PASS packaged EXE: {name} ({expected[0]}x{expected[1]})')
 
 
