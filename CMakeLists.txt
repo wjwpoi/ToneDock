@@ -62,7 +62,7 @@ endif()
 juce_add_gui_app(ToneDockApp PRODUCT_NAME "ToneDock" COMPANY_NAME "ToneDock" BUNDLE_ID "org.tonedock.app"
   MICROPHONE_PERMISSION_ENABLED TRUE MICROPHONE_PERMISSION_TEXT "ToneDock processes audio from your guitar interface."
   PLIST_TO_MERGE "${CMAKE_CURRENT_SOURCE_DIR}/packaging/Info.plist")
-target_sources(ToneDockApp PRIVATE src/Main.cpp)
+target_sources(ToneDockApp PRIVATE src/Main.cpp src/AudioSetup.cpp)
 add_library(tonedock_link_only INTERFACE)
 target_link_libraries(tonedock_link_only INTERFACE "$<LINK_ONLY:ToneDock>")
 function(tonedock_link_application target)

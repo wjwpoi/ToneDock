@@ -1,11 +1,12 @@
 #include "Editor.h"
+#include "Theme.h"
 
 namespace tonedock {
 namespace {
-const juce::Colour background{0xff111715},panel{0xff1b2420},ink{0xffecf2e8},muted{0xff93a79a},accent{0xffbfeb83};
+const juce::Colour background=theme::background,panel=theme::panel,ink=theme::ink,muted=theme::muted,accent=theme::accent;
 void style(juce::TextEditor& e,const juce::String& placeholder) {
     e.setTextToShowWhenEmpty(placeholder,muted);e.setColour(juce::TextEditor::backgroundColourId,panel);
-    e.setColour(juce::TextEditor::textColourId,ink);e.setColour(juce::TextEditor::outlineColourId,juce::Colour(0xff35443a));
+    e.setColour(juce::TextEditor::textColourId,ink);e.setColour(juce::TextEditor::outlineColourId,theme::border);
 }
 juce::StringArray parameterNames(const juce::String& type) {
     if(type=="Gate")return {"Threshold","Release"};
@@ -42,13 +43,18 @@ struct Editor::ModelRows : juce::ListBoxModel {
     int getNumRows() override{return int(editor.filtered.size());}
     void paintListBoxItem(int row,juce::Graphics& g,int w,int h,bool selected) override {
         if(row<0 || row>=getNumRows())return;auto& m=editor.filtered[size_t(row)];
-        g.setColour(selected?juce::Colour(0xff344734):panel);g.fillRoundedRectangle(4,2,float(w-8),float(h-4),6);
+        auto box=juce::Rectangle<float>(4,2,float(w-8),float(h-4));
+        g.setColour(selected?theme::accentSoft:panel);g.fillRoundedRectangle(box,6);
+        g.setColour(selected?theme::accentLine:theme::divider);g.drawRoundedRectangle(box.reduced(.5f),6,1);
         g.setColour(ink);g.setFont(14);g.drawText((m.favorite?"* ":"")+m.name,13,5,w-26,23,juce::Justification::centredLeft);
         g.setColour(muted);g.setFont(11);g.drawText(m.category+"  /  "+m.architecture,13,29,w-26,17,juce::Justification::centredLeft);
     }
     void selectedRowsChanged(int row) override{editor.selectModel(row);}
     void listBoxItemDoubleClicked(int row,const juce::MouseEvent&) override{
-        if(row>=0 && row<getNumRows())editor.processor.loadModel(editor.filtered[size_t(row)]);
+        if(row>=0 && row<getNumRows())editor.processor.loadModel(editor.filtered[size_t(row)],editor.selectedStageId);
+    }
+    juce::var getDragSourceDescription(const juce::SparseSet<int>& rows) override {
+        auto row=rows[0];return row>=0 && row<getNumRows()?juce::var("model:"+editor.filtered[size_t(row)].id):juce::var();
     }
 };
 struct Editor::ChainRows : juce::ListBoxModel {
@@ -56,11 +62,13 @@ struct Editor::ChainRows : juce::ListBoxModel {
     int getNumRows() override{return int(editor.visibleChain.size());}
     void paintListBoxItem(int row,juce::Graphics& g,int w,int h,bool selected) override {
         if(row<0 || row>=getNumRows())return;auto& s=editor.visibleChain[size_t(row)];
-        g.setColour(selected?juce::Colour(0xff30462c):panel);g.fillRoundedRectangle(2,3,float(w-4),float(h-6),8);
-        g.setColour(s.controls->enabled.load()?accent:muted);g.fillEllipse(18,22,8,8);
+        auto box=juce::Rectangle<float>(2,3,float(w-4),float(h-6));auto on=s.controls->enabled.load();
+        g.setColour(selected?theme::accentSoft:panel);g.fillRoundedRectangle(box,8);
+        g.setColour(selected?accent:theme::divider);g.drawRoundedRectangle(box.reduced(.5f),8,selected?1.5f:1.0f);
+        g.setColour(on?accent:theme::border);g.fillEllipse(18,22,8,8);g.setColour(muted);
         g.setFont(13);g.drawText(juce::String(row+1).paddedLeft('0',2),37,6,30,h-12,juce::Justification::centredLeft);
         g.setColour(ink);g.setFont(15);g.drawText(s.type,80,5,130,h-10,juce::Justification::centredLeft);
-        g.setColour(muted);g.setFont(12);g.drawText(s.file.isEmpty() && (s.type=="NAM" || s.type=="Cabinet IR")?"Choose a model from your library":s.title,210,5,w-240,h-10,juce::Justification::centredLeft);
+        g.setColour(muted);g.setFont(12);g.drawText(s.file.isEmpty() && (s.type=="NAM" || s.type=="Cabinet IR")?"Double-click a model in the library, or drag one here":s.title,210,5,w-240,h-10,juce::Justification::centredLeft);
     }
     void selectedRowsChanged(int row) override{editor.selectStage(row);}
     juce::var getDragSourceDescription(const juce::SparseSet<int>& rows) override {
@@ -102,7 +110,7 @@ public:
 private:
     int getNumRows() override{return tones.size();}
     void paintListBoxItem(int row,juce::Graphics& g,int w,int h,bool selected) override {
-        if(row<0 || row>=tones.size())return;g.setColour(selected?juce::Colour(0xff344734):panel);g.fillRect(0,1,w,h-2);
+        if(row<0 || row>=tones.size())return;g.setColour(selected?theme::accentSoft:panel);g.fillRect(0,1,w,h-2);
         g.setColour(ink);g.setFont(13);g.drawText(tones[row].title,8,3,w-16,20,juce::Justification::centredLeft);
         g.setColour(muted);g.setFont(11);g.drawText(tones[row].user.creatorName()+" / "+tones[row].gear,8,23,w-16,16,juce::Justification::centredLeft);
     }
@@ -174,20 +182,17 @@ private:
 };
 
 Editor::Editor(Processor& p):AudioProcessorEditor(p),processor(p) {
-    theme.setColour(juce::ResizableWindow::backgroundColourId,background);theme.setColour(juce::TextButton::buttonColourId,panel);
-    theme.setColour(juce::TextButton::textColourOffId,ink);theme.setColour(juce::ComboBox::backgroundColourId,panel);
-    theme.setColour(juce::Slider::rotarySliderFillColourId,accent);theme.setColour(juce::Slider::thumbColourId,accent);
-    setLookAndFeel(&theme);
+    theme::apply(lookAndFeel);setLookAndFeel(&lookAndFeel);
     for(auto* c:std::initializer_list<juce::Component*>{&libraryList,&chainList,&search,&categoryEdit,&tagsEdit,&link,&categoryFilter,&effectChoice,&importButton,&cloudButton,&loadButton,&favoriteButton,&metadataButton,&removeModelButton,&addButton,&deleteButton,&upButton,&downButton,&bypassStageButton,&audioButton,&saveButton,&openButton,&linkButton,&inputGain,&outputGain,&bypass})addAndMakeVisible(c);
     modelRows=std::make_unique<ModelRows>(*this);chainRows=std::make_unique<ChainRows>(*this);
-    libraryList.setModel(modelRows.get());libraryList.setRowHeight(51);libraryList.setColour(juce::ListBox::backgroundColourId,background);
+    libraryList.setModel(modelRows.get());libraryList.setRowHeight(54);libraryList.setColour(juce::ListBox::backgroundColourId,background);
     chainList.setModel(chainRows.get());chainList.setRowHeight(52);chainList.setColour(juce::ListBox::backgroundColourId,background);
     style(search,"Search names, tags, creator...");style(categoryEdit,"Category");style(tagsEdit,"Tags, comma separated");style(link,"Paste a TONE3000 tone page URL");
     search.onTextChange=[this]{refreshLibrary();};categoryFilter.onChange=[this]{refreshLibrary();};
     categoryFilter.addItem("All models",1);categoryFilter.addItem("Favorites",2);categoryFilter.setSelectedId(1);
     for(auto& t:effectTypes)effectChoice.addItem(t,effectChoice.getNumItems()+1);effectChoice.setSelectedId(3);
     importButton.onClick=[this]{chooseImport();};cloudButton.onClick=[this]{openTone();};linkButton.onClick=[this]{processor.openToneLink(link.getText());};
-    loadButton.onClick=[this]{auto row=libraryList.getSelectedRow();if(row>=0 && row<int(filtered.size()))processor.loadModel(filtered[size_t(row)]);};
+    loadButton.onClick=[this]{auto row=libraryList.getSelectedRow();if(row>=0 && row<int(filtered.size()))processor.loadModel(filtered[size_t(row)],selectedStageId);};
     favoriteButton.onClick=[this]{auto row=libraryList.getSelectedRow();if(row<0 || row>=int(filtered.size()))return;
         try{auto m=filtered[size_t(row)];m.favorite=!m.favorite;processor.services->library.update(m);++processor.libraryVersion;}
         catch(const std::exception& e){processor.setMessage(e.what());}};
@@ -215,18 +220,21 @@ Editor::Editor(Processor& p):AudioProcessorEditor(p),processor(p) {
 Editor::~Editor(){processor.onOpenTone=nullptr;stopTimer();browser.reset();libraryList.setModel(nullptr);chainList.setModel(nullptr);setLookAndFeel(nullptr);}
 void Editor::paint(juce::Graphics& g) {
     g.fillAll(background);g.setColour(panel);g.fillRect(0,0,getWidth(),91);g.fillRect(0,getHeight()-45,getWidth(),45);
+    g.setColour(theme::divider);g.drawHorizontalLine(91,0,float(getWidth()));g.drawHorizontalLine(getHeight()-46,0,float(getWidth()));
     g.setColour(accent);g.setFont(30);g.drawText("ToneDock",22,17,250,37,juce::Justification::centredLeft);
     g.setColour(muted);g.setFont(11);g.drawText("YOUR TONES. YOUR SIGNAL.",24,57,250,19,juce::Justification::centredLeft);
     g.setColour(ink);g.setFont(13);g.drawText("MODEL LIBRARY",22,105,250,24,juce::Justification::centredLeft);
     g.drawText("SIGNAL CHAIN",344,105,200,24,juce::Justification::centredLeft);
-    g.setColour(muted);g.setFont(11);g.drawText("Drag effects to reorder. Select a row to edit.",344,134,600,20,juce::Justification::centredLeft);
+    g.setColour(muted);g.setFont(11);g.drawText("Drag to reorder. Drop a library model on a row to load it there.",344,134,600,20,juce::Justification::centredLeft);
     g.drawText("INPUT",330,14,70,20,juce::Justification::centredLeft);g.drawText("OUTPUT",565,14,80,20,juce::Justification::centredLeft);
     for(int c=0;c<2;++c){float level=c==0?processor.inputPeak.load():processor.outputPeak.load();int x=c==0?330:565;
-        g.setColour(juce::Colour(0xff35443a));g.fillRoundedRectangle(float(x),72,190,4,2);g.setColour(level>=.99f?juce::Colours::orange:accent);g.fillRoundedRectangle(float(x),72,190*juce::jlimit(0.0f,1.0f,level),4,2);}
-    g.setColour(juce::Colour(0xff35443a));g.drawVerticalLine(321,100,float(getHeight()-60));
-    g.setColour(muted);g.setFont(12);g.drawText(displayStatus,22,getHeight()-39,getWidth()-260,30,juce::Justification::centredLeft);
-    g.drawText(juce::String(processor.engine.latency())+" samples DSP latency",getWidth()-240,getHeight()-39,220,30,juce::Justification::centredRight);
-    if(filtered.empty()){g.setColour(muted);g.setFont(13);g.drawFittedText("Drop .nam / IR .wav / .zip here\nor import from TONE3000",30,260,275,100,juce::Justification::centred,4);}
+        g.setColour(theme::track);g.fillRoundedRectangle(float(x),72,190,4,2);g.setColour(level>=.99f?theme::warn:accent);g.fillRoundedRectangle(float(x),72,190*juce::jlimit(0.0f,1.0f,level),4,2);}
+    g.setColour(theme::divider);g.drawVerticalLine(321,100,float(getHeight()-60));
+    auto right=hostLine.isNotEmpty()?hostLine:juce::String(processor.engine.latency())+" samples DSP latency";
+    auto rightWidth=hostLine.isNotEmpty()?juce::jmin(getWidth()-320,int(getWidth()*.62f)):220;
+    g.setColour(muted);g.setFont(12);g.drawText(displayStatus,22,getHeight()-39,getWidth()-rightWidth-50,30,juce::Justification::centredLeft);
+    g.setColour(theme::body);g.drawFittedText(right,getWidth()-rightWidth-20,getHeight()-39,rightWidth,30,juce::Justification::centredRight,1);
+    if(filtered.empty()){g.setColour(muted);g.setFont(13);g.drawFittedText("Drop .nam / IR .wav / .zip here\nor get models from TONE3000",30,260,275,100,juce::Justification::centred,4);}
     for(auto& s:visibleChain)if(s.id==selectedStageId && (s.type=="NAM" || s.type=="Cabinet IR")) {
         g.setColour(muted);g.setFont(14);
         g.drawFittedText(s.type=="NAM"?"Choose an amplifier or pedal capture from your library.\n\nFor an amp-only capture, add a cabinet IR after NAM.":"Choose a WAV impulse response from your library.\n\nA capture that already includes a cabinet usually needs no additional cabinet block.",550,498,getWidth()-600,110,juce::Justification::centredLeft,5);
@@ -273,11 +281,24 @@ void Editor::selectStage(int row) {
         k.textFromValueFunction=[t=s.type,i](double value){return parameterText(t,i,value);};k.setValue(s.controls->values[size_t(i)].load(),juce::dontSendNotification);}
 }
 void Editor::editChain(const std::function<void(std::vector<StageSpec>&)>& fn){auto chain=processor.engine.chain();fn(chain);processor.engine.setChain(std::move(chain));}
-bool Editor::isInterestedInDragSource(const SourceDetails& details){return details.description.toString().startsWith("stage:");}
+bool Editor::isInterestedInDragSource(const SourceDetails& details) {
+    auto text=details.description.toString();return text.startsWith("stage:") || text.startsWith("model:");
+}
 void Editor::itemDropped(const SourceDetails& d) {
-    auto id=d.description.toString().fromFirstOccurrenceOf("stage:",false,false);
     auto y=d.localPosition.y-chainList.getY()+chainList.getViewport()->getViewPositionY();
     int target=juce::jmax(0,int(y)/chainList.getRowHeight());
+    if(d.description.toString().startsWith("model:")) {
+        auto modelId=d.description.toString().fromFirstOccurrenceOf("model:",false,false);
+        auto all=processor.services->library.entries();
+        auto entry=std::find_if(all.begin(),all.end(),[&](const auto& m){return m.id==modelId;});
+        if(entry==all.end())return;
+        auto type=entry->kind=="ir"?juce::String("Cabinet IR"):juce::String("NAM");
+        if(!chainList.getBounds().contains(d.localPosition.toInt())){processor.loadModel(*entry,selectedStageId);return;}
+        if(target<int(visibleChain.size()) && visibleChain[size_t(target)].type==type)processor.loadModel(*entry,visibleChain[size_t(target)].id);
+        else processor.loadModel(*entry,{},juce::jmin(target,int(visibleChain.size())));
+        return;
+    }
+    auto id=d.description.toString().fromFirstOccurrenceOf("stage:",false,false);
     editChain([&](auto& chain){auto it=std::find_if(chain.begin(),chain.end(),[&](const auto& s){return s.id==id;});if(it==chain.end())return;auto moving=*it;auto source=int(std::distance(chain.begin(),it));chain.erase(it);if(target>source)--target;chain.insert(chain.begin()+juce::jlimit(0,int(chain.size()),target),moving);});
 }
 void Editor::chooseImport() {
@@ -293,9 +314,9 @@ void Editor::preset(bool save) {
             else if(file.getSize()<=1024*1024 && file.loadFileAsData(data))processor.setStateInformation(data.getData(),int(data.getSize()));}));
 }
 void Editor::openTone(int id) {
-    juce::DialogWindow::LaunchOptions options;options.dialogTitle="ToneDock / TONE3000";options.dialogBackgroundColour=background;
+    juce::DialogWindow::LaunchOptions options;options.dialogTitle="ToneDock / TONE3000";options.dialogBackgroundColour=theme::background;
     options.content.setOwned(new ToneBrowser(processor,id));options.componentToCentreAround=this;options.useNativeTitleBar=true;options.resizable=true;
-    browser.reset(options.create());browser->setLookAndFeel(&theme);browser->setVisible(true);
+    browser.reset(options.create());browser->setLookAndFeel(&lookAndFeel);browser->setVisible(true);
 }
 void Editor::timerCallback() {
     if(version!=processor.libraryVersion.load())refreshLibrary();
@@ -303,6 +324,7 @@ void Editor::timerCallback() {
     auto nextChain=processor.engine.chain();bool changed=nextChain.size()!=visibleChain.size();
     if(!changed)for(size_t i=0;i<nextChain.size();++i)if(nextChain[i].id!=visibleChain[i].id || nextChain[i].title!=visibleChain[i].title || nextChain[i].controls!=visibleChain[i].controls){changed=true;break;}
     if(changed){visibleChain=std::move(nextChain);chainList.updateContent();for(size_t i=0;i<visibleChain.size();++i)if(visibleChain[i].id==selectedStageId){chainList.selectRow(int(i));selectStage(int(i));break;}}
+    hostLine=processor.hostStatus?processor.hostStatus():juce::String();
     auto state=processor.engine.status();displayStatus=state=="Ready"?processor.message():state;if(displayStatus.isEmpty())displayStatus="Ready / import a NAM model to begin";
     if(processor.getLatencySamples()!=processor.engine.latency())processor.setLatencySamples(processor.engine.latency());repaint();
 }

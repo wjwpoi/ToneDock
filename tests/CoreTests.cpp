@@ -1,5 +1,6 @@
 #include "Processor.h"
 #include "Editor.h"
+#include "LatencyProbe.h"
 #include "OAuth.h"
 #include <NAM/get_dsp.h>
 #include <atomic>
@@ -89,6 +90,25 @@ int main(){
         check(std::abs(hostAudio.getSample(0,64)-expectedHost)<1e-5,"complete plugin input-to-output signal path");
         processor.getBypassParameter()->setValueNotifyingHost(1);fill(hostAudio,.2f);processor.processBlock(hostAudio,midi);
         check(std::abs(hostAudio.getSample(0,64)-.2f)<1e-6,"host bypass preserves dry signal");
+        {
+            tonedock::Processor slots;slots.addEffect("NAM");auto chain=slots.engine.chain();auto second=chain.back().id;
+            slots.loadModel(shared,second);chain=slots.engine.chain();
+            check(chain[4].file.isNotEmpty() && chain[1].file.isEmpty(),"model loads into the chosen NAM slot");
+            slots.loadModel(shared,chain[2].id);chain=slots.engine.chain();
+            check(chain[2].file.isEmpty() && chain[1].file.isNotEmpty(),"NAM model never loads into a cabinet slot");
+            slots.loadModel(shared,{},0);chain=slots.engine.chain();
+            check(chain.size()==6 && chain[0].type=="NAM" && chain[0].file.isNotEmpty(),"model drop inserts a slot at the drop position");
+            check(slots.engine.waitForBuild(),"targeted model graph builds");
+        }
+        for(int delay:{37,600,2500}) {
+            tonedock::LatencyProbe probe;probe.start(48000);std::vector<float> line(size_t(delay),0.0f);size_t head=0;juce::Random noise(7);
+            for(int guard=0;probe.isRunning() && guard<48000*5;++guard){auto out=probe.next(line[head]+(noise.nextFloat()-.5f)*.002f);line[head]=out*.8f;head=(head+1)%line.size();}
+            check(!probe.isRunning() && probe.result()==delay,"loopback latency measurement");
+        }
+        {
+            tonedock::LatencyProbe probe;probe.start(48000);for(int guard=0;probe.isRunning() && guard<48000*5;++guard)probe.next(0);
+            check(!probe.isRunning() && probe.result()==-1,"latency test fails without a loopback");
+        }
         {
             tonedock::Processor guiProcessor;guiProcessor.loadModel(shared);check(guiProcessor.engine.waitForBuild(),"GUI fixture model loads");
             std::unique_ptr<tonedock::Editor> editor(static_cast<tonedock::Editor*>(guiProcessor.createEditorIfNeeded()));

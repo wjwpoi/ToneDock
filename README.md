@@ -45,8 +45,8 @@ Debian云端开发可从仓库根目录运行 `bash tools/cloud_build.sh`，它�
 
 ## 使用
 
-1. 启动独立版，在 Audio settings 选择吉他声卡输入、输出与缓冲；新安装默认不启用麦克风输入。插件版的音频设备由 DAW 管理。
-2. 拖入 `.nam` 或 IR，选择模型后点 Load model。NAM 模型加载到第一个 NAM 位置，IR 加载到第一个 Cabinet IR 位置；后续版本再支持明确指定多个同类位置。
+1. 首次启动独立版会打开音频设置：自动选用 ASIO（无专用 ASIO 驱动时用 Windows 独占模式），弹几下琴自动找到吉他所在输入，再选缓冲。用一根线把 Out 1 接回吉他输入可实测往返延迟。之后可随时点 Audio 修改；状态栏显示驱动、缓冲、延迟、DSP 负载和爆音计数。插件版的音频设备由 DAW 管理。
+2. 拖入 `.nam` 或 IR 导入库。双击库中模型或点 Load model，加载到当前选中的同类位置（未选中时为第一个 NAM / Cabinet IR）；也可把模型从库拖到链路中某一行：同类行直接替换，其他位置插入新的 NAM / IR。
 3. 从效果选择框添加效果，拖动行或点 Up / Down 调整顺序，选中效果调节下方旋钮。
 4. TONE3000 首次连接需要应用的 `t3k_pub_...` publishable key，可在 TONE3000 Settings → API Keys 创建，在窗口输入一次。它是客户端公开标识，不是账户密码或 `t3k_cs_` secret。登录令牌在 macOS Keychain / Windows DPAPI 中保存，不写入预设。
 5. 在浏览器选择 tone，回到软件检查作者和许可，选择具体捕获下载。导入验证完成后出现在本地模型库，可离线使用。

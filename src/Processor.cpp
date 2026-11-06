@@ -65,12 +65,17 @@ void Processor::addEffect(const juce::String& type) {
     if(type=="Reverb"){s.controls->values[2]=.2f;}if(type=="Delay"){s.controls->values[1]=.3f;s.controls->values[2]=.25f;}
     chain.push_back(std::move(s));engine.setChain(std::move(chain));
 }
-void Processor::loadModel(const ModelEntry& entry) {
+void Processor::loadModel(const ModelEntry& entry,const juce::String& targetStageId,int insertAt) {
     auto chain=engine.chain();auto type=entry.kind=="ir"?juce::String("Cabinet IR"):juce::String("NAM");
-    auto it=std::find_if(chain.begin(),chain.end(),[&](const auto& s){return s.type==type;});
+    auto it=chain.end();
+    if(insertAt<0) {
+        it=std::find_if(chain.begin(),chain.end(),[&](const auto& s){return s.type==type && s.id==targetStageId;});
+        if(it==chain.end())it=std::find_if(chain.begin(),chain.end(),[&](const auto& s){return s.type==type;});
+    }
     if(it==chain.end()) {
         if(chain.size()>=16){setMessage("Remove an effect before adding this model");return;}
-        StageSpec spec;spec.id=juce::Uuid().toString();spec.type=type;chain.push_back(spec);it=std::prev(chain.end());
+        StageSpec spec;spec.id=juce::Uuid().toString();spec.type=type;
+        it=chain.insert(chain.begin()+(insertAt<0?int(chain.size()):juce::jmin(insertAt,int(chain.size()))),spec);
     }
     it->file=services->library.fileFor(entry).getFullPathName();it->title=entry.name;
     engine.setChain(std::move(chain));setMessage("Model selected: "+entry.name);

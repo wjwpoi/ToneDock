@@ -24,14 +24,14 @@ private:
     void editChain(const std::function<void(std::vector<StageSpec>&)>&);
     void chooseImport();void preset(bool save);
     Processor& processor;
-    juce::LookAndFeel_V4 theme;
+    juce::LookAndFeel_V4 lookAndFeel;
     std::unique_ptr<ModelRows> modelRows;std::unique_ptr<ChainRows> chainRows;
     juce::ListBox libraryList,chainList;
     juce::TextEditor search,categoryEdit,tagsEdit,link;
     juce::ComboBox categoryFilter,effectChoice;
     juce::TextButton importButton{"Import"},cloudButton{"TONE3000"},loadButton{"Load model"},favoriteButton{"Favorite"},
         metadataButton{"Save tags"},removeModelButton{"Remove"},addButton{"+ Add"},deleteButton{"Delete"},upButton{"Up"},downButton{"Down"},
-        bypassStageButton{"Enable / bypass"},audioButton{"Audio settings"},saveButton{"Save preset"},openButton{"Open preset"},linkButton{"Open link"};
+        bypassStageButton{"Enable / bypass"},audioButton{"Audio"},saveButton{"Save preset"},openButton{"Open preset"},linkButton{"Open link"};
     juce::Slider inputGain,outputGain;
     juce::ToggleButton bypass{"Bypass"};
     std::array<juce::Slider,4> knobs;std::array<juce::Label,4> knobLabels;
@@ -41,7 +41,7 @@ private:
     std::unique_ptr<juce::DialogWindow> browser;
     std::vector<ModelEntry> filtered;
     std::vector<StageSpec> visibleChain;
-    juce::String selectedStageId,displayStatus;
+    juce::String selectedStageId,displayStatus,hostLine;
     int version=-1;
     int refreshTick=0;
     juce::int64 libraryModified=0;
